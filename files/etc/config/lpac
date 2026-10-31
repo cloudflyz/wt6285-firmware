@@ -1,2 +1,0 @@
-config lpac 'main'
-	option at_device '/dev/ttyUSB1'
