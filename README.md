@@ -5,7 +5,7 @@ NRadio WT6285（MT7628AN，16M flash / 128M RAM）自用固件，基于 [coolsno
 - 最新 lean master（每次构建记录 upstream SHA）
 - 双内核产物：5.10（稳定）/ 6.18（experimental）
 - 集成 **lpac**（实体 eUICC 的 profile 管理，AT 后端）
-- 集成 **sms-tool**（短信收发）+ 通知脚本
+- 集成 **sms-tool**（短信收发，来自 `coolsnowwolf/packages` 的 `utils/sms-tool`，Apache-2.0）+ 通知脚本
 - 不包含 ssr-plus
 - 构建全部在 GitHub Actions 完成，产物带 SHA256
 

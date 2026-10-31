@@ -57,3 +57,12 @@ SIM 选择真值（由 `ec200a.sh` 决定，脚本内注释里的 GPIO 编号是
 - `ec200a.sh` 重写约 40 行：GPIO 选择 + `AT+CFUN=1,1` + `usb0` 上跑 dhcp client
 - 若不需要改写 IMEI，可完全去掉 `moimei`
 - 必须保留：`kmod-usb-serial-option`、`kmod-usb-net-cdc-ether`、`usb-modeswitch`、`curl`、`ca-bundle`
+
+## 短信栈选型（2026-10-31 定）
+
+- 使用 `coolsnowwolf/packages` 的 `utils/sms-tool`（不是 vendor 二进制）
+- 上游源码：`obsy/sms_tool`，pin 在 `f07699ab5189656f595ffa75872c8938bf4b40ac`（2022-03-21）
+- 许可证 Apache-2.0，无额外 DEPENDS，编出来就是单个 `sms_tool`
+- 配置里加 `CONFIG_PACKAGE_sms-tool=y` 即可，随 lean 的 feeds 一起进固件
+- AT 口仍用 `/dev/ttyUSB1`，参数沿用原固件 `/etc/config/sms_tool`
+- LuCI 页面不强制：命令行 + 通知脚本（Bark/Telegram）足够
