@@ -76,20 +76,6 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Apply defconfig
-        run: |
-          cd lede
-          cp "../${{ matrix.cfg }}" .config
-          if [ -n "${{ matrix.extra }}" ]; then echo "${{ matrix.extra }}" >> .config; fi
-          make defconfig
-
-      - name: Apply rootfs overlay
-        run: |
-          cd lede
-          if [ -d ../files ] && [ -n "$(ls -A ../files 2>/dev/null | grep -v README.md)" ]; then
-            cp -a ../files/. package/base-files/files/
-          fi
-
       - name: Copy custom packages
         run: |
           cd lede
@@ -101,6 +87,29 @@ jobs:
             cp -a "$d" "package/$name"
           done
           ls package | grep -E 'lpac|quectel|wt6285'
+
+      - name: Apply rootfs overlay
+        run: |
+          cd lede
+          if [ -d ../files ] && [ -n "$(ls -A ../files 2>/dev/null | grep -v README.md)" ]; then
+            cp -a ../files/. package/base-files/files/
+          fi
+
+      - name: Apply defconfig
+        run: |
+          cd lede
+          cp "../${{ matrix.cfg }}" .config
+          if [ -n "${{ matrix.extra }}" ]; then echo "${{ matrix.extra }}" >> .config; fi
+          make defconfig
+          echo "--- package assertions ---"
+          for sym in CONFIG_PACKAGE_lpac=y CONFIG_PACKAGE_quectel-cm-5g=y CONFIG_PACKAGE_luci-app-wt6285=y CONFIG_PACKAGE_sms-tool=y; do
+            if grep -q "^$sym$" .config; then
+              echo "OK $sym"
+            else
+              echo "::error::missing $sym"
+              exit 1
+            fi
+          done
 
       - name: Build firmware
         run: |
