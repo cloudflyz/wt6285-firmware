@@ -79,9 +79,6 @@ jobs:
             cp -a ../files/. package/base-files/files/
           fi
 
-      - name: Download package sources
-        run: cd lede && make download -j8 || true
-
       - name: Build firmware
         run: |
           cd lede
