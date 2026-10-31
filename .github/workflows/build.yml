@@ -79,6 +79,18 @@ jobs:
             cp -a ../files/. package/base-files/files/
           fi
 
+      - name: Copy custom packages
+        run: |
+          cd lede
+          for d in ../package/*/; do
+            [ -d "$d" ] || continue
+            name=$(basename "$d")
+            echo "adding package: $name"
+            rm -rf "package/$name"
+            cp -a "$d" "package/$name"
+          done
+          ls package | grep -E 'lpac|quectel|wt6285'
+
       - name: Build firmware
         run: |
           cd lede
