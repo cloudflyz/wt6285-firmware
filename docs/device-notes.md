@@ -66,3 +66,13 @@ SIM 选择真值（由 `ec200a.sh` 决定，脚本内注释里的 GPIO 编号是
 - 配置里加 `CONFIG_PACKAGE_sms-tool=y` 即可，随 lean 的 feeds 一起进固件
 - AT 口仍用 `/dev/ttyUSB1`，参数沿用原固件 `/etc/config/sms_tool`
 - LuCI 页面不强制：命令行 + 通知脚本（Bark/Telegram）足够
+
+## 原厂 LuCI 参考与 IMEI 重写（2026-11-01）
+
+- 已抓取原厂页面存档：`device-luci-apps.tar.gz`（momoe.lua 控制器/CBI/视图 + modem/*.lua + smsled 脚本 + ACL）
+- `/usr/libexec/wt6285/imei.sh` 重写了原厂 `moimei`：
+  - 只做 `AT+EGMR=1,7,"<IMEI>"` + 回读校验 + `AT+CFUN=1,1`
+  - 同时同步 `uci ec200a.ec200a.IMEI / modify_imei`
+  - 用法：`imei.sh read` / `imei.sh write <15位>`
+- 回滚依赖设备的 Breed，不再单独准备 u-boot 恢复文档
+- lpac UQMI 退路与 LuCI HTTPS 暂缓（按用户决定）
