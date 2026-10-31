@@ -16,6 +16,8 @@ elseif action == "download" and smdp and code then
 	sys.call("/usr/libexec/wt6285/lpacctl.sh profile download -s " .. smdp .. " -m " .. code .. " >/dev/null 2>&1")
 end
 
+local epoch = tonumber(sys.exec("date +%s") or "0") or 0
+local clock_ok = epoch > 1700000000
 local list = sys.exec("/usr/libexec/wt6285/lpacctl.sh profile list 2>&1")
 %>
 
@@ -54,6 +56,9 @@ local list = sys.exec("/usr/libexec/wt6285/lpacctl.sh profile list 2>&1")
 		<p><input type="text" name="code" placeholder="Activation Code" style="width:60%" /></p>
 		<input class="cbi-button cbi-button-apply" type="submit" value="<%:下载%>" />
 	</form>
+	<% if not clock_ok then %>
+	<p class="alert-message warning"><%:设备时间不正确（未联网校时），下载会被 TLS 校验拒绝。请先让 WAN 联通并等待 NTP 同步。%></p>
+	<% end %>
 	<p class="cbi-section-descr"><%:下载前请确认设备时间正确，否则 TLS 校验会失败。%></p>
 </div>
 <%+footer%>

@@ -1,0 +1,6 @@
+config ec200a 'ec200a'
+	option sim_sel '0'
+	option modify_band '0'
+	option band_hex '4'
+	option modify_imei '0'
+	option IMEI ''
