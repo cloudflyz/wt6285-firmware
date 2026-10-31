@@ -6,6 +6,7 @@ NRadio WT6285（MT7628AN，16M flash / 128M RAM）自用固件，基于 [coolsno
 - 双内核产物：5.10（稳定）/ 6.18（experimental）
 - 集成 **lpac**（实体 eUICC 的 profile 管理，AT 后端）
 - 集成 **sms-tool**（短信收发，来自 `coolsnowwolf/packages` 的 `utils/sms-tool`，Apache-2.0）+ 通知脚本
+- 完整 **LuCI 页面**：状态 / SIM / eSIM / 短信 / 设置（含 IMEI 修改，二次确认）
 - 不包含 ssr-plus
 - 构建全部在 GitHub Actions 完成，产物带 SHA256
 
@@ -47,5 +48,6 @@ sysupgrade -n /tmp/wt6285-5.10-<sha>.bin
 - [x] P0 设备备份与脚本归档
 - [ ] P1 CI 空构建
 - [ ] P2 集成 lpac + sms-tool
-- [ ] P3 实机验证
-- [ ] P4 固化文档与检查
+- [ ] P3 LuCI 页面（`docs/luci-plan.md`）
+- [ ] P4 实机验证
+- [ ] P5 固化文档与检查
