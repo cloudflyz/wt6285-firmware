@@ -54,9 +54,20 @@ jobs:
 
       - name: Clone lean at pinned commit
         run: |
-          git clone --filter=blob:none https://github.com/coolsnowwolf/lede.git lede
+          for i in 1 2 3; do
+            rm -rf lede
+            if git clone --depth 1 https://github.com/coolsnowwolf/lede.git lede; then
+              break
+            fi
+            echo "clone failed, retry $i"
+            sleep 15
+          done
           cd lede
-          git checkout "$(cat ../upstream.lock)"
+          TARGET_SHA="$(cat ../upstream.lock)"
+          if ! git cat-file -e "$TARGET_SHA^{commit}" 2>/dev/null; then
+            git fetch --depth 1 origin "$TARGET_SHA" || git fetch origin "$TARGET_SHA"
+          fi
+          git checkout "$TARGET_SHA"
           echo "LEAN_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Update and install feeds
