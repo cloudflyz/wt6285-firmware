@@ -1,0 +1,36 @@
+<%
+local sys = require "luci.sys"
+local out = sys.exec("/usr/libexec/wt6285/status.sh 2>/dev/null")
+local kv = {}
+for line in out:gmatch("[^\n]+") do
+	local k, v = line:match("^([%w_]+)=(.*)$")
+	if k then kv[k] = v end
+end
+local function row(name, key)
+	%>
+	<tr class="tr"><th class="th" style="width:30%"><%=name%></th><td class="td"><%=kv[key] and #kv[key] > 0 and kv[key] or "-"%></td></tr>
+	<%
+end
+%>
+
+<%+header%>
+<h2 name="content"><%:模块状态%></h2>
+<div class="cbi-map">
+	<table class="cbi-section-table">
+		<% row("IMEI", "imei") %>
+		<% row("ICCID", "iccid") %>
+		<% row("运营商", "cops") %>
+		<% row("注册状态", "creg") %>
+		<% row("信号 (CSQ)", "csq") %>
+		<% row("信号 (QCSQ)", "qcsq") %>
+		<% row("频段信息", "nwinfo") %>
+		<% row("功能等级 (CFUN)", "cfun") %>
+		<% row("SIM 选择", "sim_sel") %>
+		<% row("WAN 状态", "wan_up") %>
+		<% row("usb0 地址", "usb0_ip") %>
+	</table>
+	<div class="cbi-page-actions">
+		<input class="cbi-button cbi-button-apply" type="button" value="<%:刷新%>" onclick="location.reload()" />
+	</div>
+</div>
+<%+footer%>

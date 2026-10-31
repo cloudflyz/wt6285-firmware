@@ -2,12 +2,6 @@ name: build
 
 on:
   workflow_dispatch:
-    inputs:
-      kernels:
-        description: "Which kernel(s) to build"
-        type: choice
-        options: [both, "5.10", "6.18"]
-        default: both
   push:
     tags: ["v*"]
 
@@ -19,7 +13,7 @@ jobs:
   build:
     name: build-${{ matrix.kver }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
@@ -50,7 +44,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: lede/dl
-          key: dl-${{ matrix.kver }}-${{ hashFiles('upstream.lock') }}-${{ github.run_id }}
+          key: dl-${{ matrix.kver }}-${{ hashFiles('upstream.lock', 'configs/**') }}
           restore-keys: |
             dl-${{ matrix.kver }}-${{ hashFiles('upstream.lock') }}-
             dl-${{ matrix.kver }}-

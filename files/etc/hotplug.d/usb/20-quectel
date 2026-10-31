@@ -1,0 +1,9 @@
+#!/bin/sh
+# 模块 CFUN 复位后会重新枚举，等接口出现再拉起 WAN
+[ "$ACTION" = "add" ] || exit 0
+[ -n "$PRODUCT" ] || exit 0
+case "$PRODUCT" in
+	2c7c/6005/*|2c7c/*)
+		( sleep 3; /etc/init.d/wt6285 start ) >/dev/null 2>&1 &
+		;;
+esac

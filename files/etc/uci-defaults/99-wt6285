@@ -1,0 +1,25 @@
+#!/bin/sh
+# WT6285 first-boot defaults
+
+uci set system.@system[0].hostname='WT6285'
+uci set system.@system[0].timezone='CST-8'
+uci set system.@system[0].zonename='Asia/Shanghai'
+uci set system.ntp.enabled='1'
+uci set system.ntp.enable_server='0'
+uci -q delete system.ntp.server
+uci add_list system.ntp.server='ntp.aliyun.com'
+uci add_list system.ntp.server='ntp.tencent.com'
+
+uci set network.lan.ipaddr='192.168.8.1'
+uci set network.lan.netmask='255.255.255.0'
+
+uci set network.wan.proto='dhcp'
+uci set network.wan.device='usb0'
+uci set network.wan6.proto='dhcpv6'
+uci set network.wan6.device='usb0'
+uci set dhcp.wan.ignore='1'
+
+uci commit system
+uci commit network
+uci commit dhcp
+exit 0

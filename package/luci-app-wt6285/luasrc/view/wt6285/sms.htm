@@ -1,0 +1,39 @@
+<%
+local sys = require "luci.sys"
+local http = require "luci.http"
+local number = http.formvalue("number")
+local text = http.formvalue("text")
+local del = http.formvalue("delete")
+
+if number and text and #number > 0 then
+	sys.call("/usr/bin/sms_tool -d /dev/ttyUSB1 send " .. number .. " '" .. text:gsub("'", "") .. "' >/dev/null 2>&1")
+end
+
+if del == "all" then
+	sys.call("/usr/bin/sms_tool -d /dev/ttyUSB1 delete all >/dev/null 2>&1")
+end
+
+local list = sys.exec("/usr/bin/sms_tool -d /dev/ttyUSB1 recv -j 2>&1")
+%>
+
+<%+header%>
+<h2 name="content"><%:短信%></h2>
+
+<div class="cbi-section">
+	<h3><%:收件箱%></h3>
+	<pre style="white-space:pre-wrap"><%=list%></pre>
+	<form method="post" action="">
+		<input type="hidden" name="delete" value="all" />
+		<input class="cbi-button cbi-button-reset" type="submit" value="<%:清空全部%>" />
+	</form>
+</div>
+
+<div class="cbi-section">
+	<h3><%:发送%></h3>
+	<form method="post" action="">
+		<p><input type="text" name="number" placeholder="+8613800000000" style="width:40%" /></p>
+		<p><textarea name="text" rows="4" style="width:80%"></textarea></p>
+		<input class="cbi-button cbi-button-apply" type="submit" value="<%:发送%>" />
+	</form>
+</div>
+<%+footer%>

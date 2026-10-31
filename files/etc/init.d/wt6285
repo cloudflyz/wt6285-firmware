@@ -1,0 +1,19 @@
+#!/bin/sh /etc/rc.common
+START=95
+STOP=10
+
+AT_PORT="$(uci -q get lpac.main.at_device || echo /dev/ttyUSB1)"
+SMS_TOOL=/usr/bin/sms_tool
+
+at() { "$SMS_TOOL" -d "$AT_PORT" at "$1" 2>/dev/null; }
+
+start() {
+	# 让模块进入 ECM 数据模式
+	at 'AT+QNETDEVCTL=3,1' >/dev/null 2>&1
+	sleep 2
+	ifup wan 2>/dev/null
+}
+
+stop() {
+	ifdown wan 2>/dev/null
+}

@@ -1,0 +1,59 @@
+<%
+local sys = require "luci.sys"
+local http = require "luci.http"
+local action = http.formvalue("action")
+local iccid = http.formvalue("iccid")
+local smdp = http.formvalue("smdp")
+local code = http.formvalue("code")
+
+if action == "enable" and iccid then
+	sys.call("/usr/libexec/wt6285/lpacctl.sh profile enable " .. iccid .. " >/dev/null 2>&1")
+elseif action == "disable" and iccid then
+	sys.call("/usr/libexec/wt6285/lpacctl.sh profile disable " .. iccid .. " >/dev/null 2>&1")
+elseif action == "delete" and iccid then
+	sys.call("/usr/libexec/wt6285/lpacctl.sh profile delete " .. iccid .. " >/dev/null 2>&1")
+elseif action == "download" and smdp and code then
+	sys.call("/usr/libexec/wt6285/lpacctl.sh profile download -s " .. smdp .. " -m " .. code .. " >/dev/null 2>&1")
+end
+
+local list = sys.exec("/usr/libexec/wt6285/lpacctl.sh profile list 2>&1")
+%>
+
+<%+header%>
+<h2 name="content"><%:eSIM Profile%></h2>
+
+<div class="cbi-section">
+	<h3><%:已安装%></h3>
+	<pre style="white-space:pre-wrap"><%=list%></pre>
+</div>
+
+<div class="cbi-section">
+	<h3><%:操作%></h3>
+	<form method="post" action="">
+		<input type="hidden" name="action" value="enable" />
+		<input type="text" name="iccid" placeholder="ICCID" />
+		<input class="cbi-button cbi-button-apply" type="submit" value="<%:启用%>" />
+	</form>
+	<form method="post" action="">
+		<input type="hidden" name="action" value="disable" />
+		<input type="text" name="iccid" placeholder="ICCID" />
+		<input class="cbi-button" type="submit" value="<%:禁用%>" />
+	</form>
+	<form method="post" action="">
+		<input type="hidden" name="action" value="delete" />
+		<input type="text" name="iccid" placeholder="ICCID" />
+		<input class="cbi-button cbi-button-reset" type="submit" value="<%:删除%>" />
+	</form>
+</div>
+
+<div class="cbi-section">
+	<h3><%:下载新 Profile%></h3>
+	<form method="post" action="">
+		<input type="hidden" name="action" value="download" />
+		<p><input type="text" name="smdp" placeholder="SM-DP+ 地址" style="width:60%" /></p>
+		<p><input type="text" name="code" placeholder="Activation Code" style="width:60%" /></p>
+		<input class="cbi-button cbi-button-apply" type="submit" value="<%:下载%>" />
+	</form>
+	<p class="cbi-section-descr"><%:下载前请确认设备时间正确，否则 TLS 校验会失败。%></p>
+</div>
+<%+footer%>
