@@ -7,7 +7,6 @@ NRadio WT6285（MT7628AN，16M flash / 128M RAM）自用固件，基于 [coolsno
 - 集成 **lpac**（实体 eUICC 的 profile 管理，AT 后端）
 - 集成 **sms-tool**（短信收发，来自 `coolsnowwolf/packages` 的 `utils/sms-tool`，Apache-2.0）+ 通知脚本
 - 完整 **LuCI 页面**：状态 / SIM / eSIM / 短信 / 设置（含 IMEI 修改，二次确认）
-- 不包含 ssr-plus
 - 构建全部在 GitHub Actions 完成，产物带 SHA256
 
 ## 设备事实
