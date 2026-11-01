@@ -6,7 +6,7 @@ on:
       kernel:
         description: "Kernel to build"
         type: choice
-        options: [5.10, both]
+        options: ["5.10", "both"]
         default: "5.10"
       cfg:
         description: "Config file"
