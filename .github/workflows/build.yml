@@ -53,7 +53,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: lede/dl
-          key: dl-${{ matrix.kver }}-${{ hashFiles('upstream.lock', 'configs/**') }}
+          key: dl-${{ matrix.kver }}-${{ hashFiles('upstream.lock') }}
           restore-keys: |
             dl-${{ matrix.kver }}-${{ hashFiles('upstream.lock') }}-
             dl-${{ matrix.kver }}-
