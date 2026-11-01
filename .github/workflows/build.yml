@@ -3,11 +3,6 @@ name: build
 on:
   workflow_dispatch:
     inputs:
-      kernel:
-        description: "Kernel to build"
-        type: choice
-        options: ["5.10", "both"]
-        default: "5.10"
       cfg:
         description: "Config file"
         type: choice
@@ -28,7 +23,6 @@ jobs:
     name: build-${{ matrix.kver }}
     runs-on: ubuntu-24.04
     timeout-minutes: 300
-    if: matrix.kver == '5.10' || inputs.kernel == 'both'
     strategy:
       fail-fast: false
       matrix:
@@ -36,9 +30,6 @@ jobs:
           - kver: "5.10"
             cfg: ${{ inputs.cfg || 'configs/wt6285-lite.config' }}
             extra: ""
-          - kver: "6.18"
-            cfg: configs/wt6285-6.18.config
-            extra: "CONFIG_TESTING_KERNEL=y"
     steps:
       - uses: actions/checkout@v4
 
