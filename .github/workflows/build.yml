@@ -30,6 +30,9 @@ jobs:
           - kver: "5.10"
             cfg: ${{ inputs.cfg || 'configs/wt6285-lite.config' }}
             extra: ""
+          - kver: "6.18"
+            cfg: configs/wt6285-6.18.config
+            extra: ""
     steps:
       - uses: actions/checkout@v4
 
