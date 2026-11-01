@@ -79,6 +79,14 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+      - name: Patch download.pl timeouts
+        run: |
+          f=lede/scripts/download.pl
+          if ! grep -q -- "--speed-time 45" "$f"; then
+            sed -i "s|curl -f --connect-timeout 20 --retry 5 --location|curl -f --connect-timeout 20 --retry 3 --location --speed-limit 2048 --speed-time 45 --max-time 900|" "$f"
+          fi
+          grep -n "curl -f" "$f"
+
       - name: Copy custom packages
         run: |
           cd lede
