@@ -12,7 +12,7 @@ NRadio WT6285（鲲鹏cc）自用固件，基于 [coolsnowwolf/lede](https://git
 - **4G 拨号**：`quectel-cm-5G`，兼容 EC200A 系模块
 - **LuCI 面板**：状态 / SIM / eSIM / 短信 / 设置（含 IMEI 修改，二次确认）
 - **构建可溯源**：固定 lean commit，CI 全程自动化，产物附 SHA256 与 buildinfo
-- **无多余组件**：不含 ssr-plus，TLS 统一 OpenSSL
+- **TLS 统一**：wpad、libopenssl、curl、wget 共用一套 OpenSSL 栈
 
 ## 硬件
 
