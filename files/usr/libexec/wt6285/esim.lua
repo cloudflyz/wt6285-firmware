@@ -223,7 +223,8 @@ elseif action == "enable" or action == "disable" then
 	if not ok then os.exit(1) end
 
 	-- 实测：AT+CFUN=1,1 不足以让基带重新附着，必须走 USB 重枚举 + ifup wan
-	run("sh -c '/usr/libexec/wt6285/modem-restart.sh --hard >/tmp/wt6285-esim-restart.log 2>&1 &'")
+	-- 9>&- 关闭继承来的锁 fd，否则后台重启脚本会与父进程的 flock 死锁
+	run("sh -c '/usr/libexec/wt6285/modem-restart.sh --hard >/tmp/wt6285-esim-restart.log 2>&1 9>&- &'")
 	print("resetting=hard")
 
 else

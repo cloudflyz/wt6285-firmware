@@ -47,7 +47,7 @@ case "$1" in
 	;;
 *)
 	logger -t wt6285 "modem restart: soft (AT+CFUN=1,1)"
-	/usr/bin/sms_tool -d "$DEV" at "AT+CFUN=1,1" >/dev/null 2>&1
+	flock -x -w 10 /var/lock/wt6285-at.lock /usr/bin/sms_tool -d "$DEV" at "AT+CFUN=1,1" >/dev/null 2>&1
 	;;
 esac
 

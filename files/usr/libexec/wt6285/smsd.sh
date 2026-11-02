@@ -1,5 +1,8 @@
 #!/bin/sh
 # 轮询新短信并推送通知
+# 串口互斥：本脚本与 at.sh / esim.lua / smsd.sh 共享同一个 AT 口
+exec 9>/var/lock/wt6285-at.lock
+flock -x 9
 DEV="$(uci -q get lpac.main.at_device || echo /dev/ttyUSB1)"
 URL="$(uci -q get sms_tool.general.notify_url)"
 EN="$(uci -q get sms_tool.general.notify_enabled)"
