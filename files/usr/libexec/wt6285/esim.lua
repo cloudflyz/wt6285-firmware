@@ -222,8 +222,9 @@ elseif action == "enable" or action == "disable" then
 	print(ok and "result=ok" or ("error=" .. tostring(err)))
 	if not ok then os.exit(1) end
 
-	run(string.format("timeout 6 /usr/bin/sms_tool -d %s at 'AT+CFUN=1,1' >/dev/null 2>&1", DEV))
-	print("resetting=1")
+	-- 实测：AT+CFUN=1,1 不足以让基带重新附着，必须走 USB 重枚举 + ifup wan
+	run("sh -c '/usr/libexec/wt6285/modem-restart.sh --hard >/tmp/wt6285-esim-restart.log 2>&1 &'")
+	print("resetting=hard")
 
 else
 	print("usage: esim.lua info|list|enable <ICCID>|disable <ICCID>")
