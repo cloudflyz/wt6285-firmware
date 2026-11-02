@@ -1,0 +1,78 @@
+<%
+local cmd = cmd or ""
+local output = output or ""
+%>
+
+<%+header%>
+
+<style>
+.wt-at-wrap { max-width: 980px; }
+.wt-at-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.wt-at-chips button { font-size: 12px; padding: 5px 10px; border: 1px solid rgba(127,127,127,.35); border-radius: 14px; background: rgba(127,127,127,.07); cursor: pointer; color: inherit; }
+.wt-at-chips button:hover { background: rgba(127,127,127,.16); }
+.wt-at-box { border: 1px solid rgba(127,127,127,.28); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+.wt-at-box h3 { margin: 0; padding: 11px 16px; font-size: 14px; font-weight: 600; background: rgba(127,127,127,.09); border-bottom: 1px solid rgba(127,127,127,.22); }
+.wt-at-body { padding: 14px 16px; }
+textarea.wt-at-input { width: 100%; min-height: 84px; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; padding: 10px; border: 1px solid rgba(127,127,127,.35); border-radius: 8px; background: rgba(127,127,127,.04); color: inherit; resize: vertical; }
+pre.wt-at-out { margin: 0; padding: 14px 16px; min-height: 160px; max-height: 460px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; background: rgba(127,127,127,.05); }
+.wt-at-row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+.wt-hint { font-size: 12px; opacity: .6; }
+.wt-empty { opacity: .55; }
+</style>
+
+<h2 name="content"><%:移远模块 · AT 指令%></h2>
+
+<div class="wt-at-wrap">
+
+	<div class="wt-at-box">
+		<h3><%:常用指令%></h3>
+		<div class="wt-at-body">
+			<div class="wt-at-chips">
+				<% for _, c in ipairs({
+					"AT+CSQ", "AT+CGSN", "AT+QCCID", "AT+CPIN?", "AT+CREG?",
+					"AT+COPS?", "AT+QNWINFO", "AT+QCSQ", "AT+CFUN?",
+					"AT+QCFG=\"usbnet\"", "AT+QENG=\"servingcell\""
+				}) do %>
+					<button type="button" data-cmd="<%=c%>"><%=c%></button>
+				<% end %>
+			</div>
+			<span class="wt-hint"><%:点一下填入输入框，可多行，逐行执行%></span>
+		</div>
+	</div>
+
+	<form method="post" action="">
+		<div class="wt-at-box">
+			<h3><%:发送指令%></h3>
+			<div class="wt-at-body">
+				<textarea class="wt-at-input" name="cmd" spellcheck="false" placeholder="AT+CSQ"><%=luci.util.pcdata(cmd)%></textarea>
+				<div class="wt-at-row">
+					<input class="cbi-button cbi-button-apply" type="submit" value="<%:执行%>" />
+					<input class="cbi-button" type="button" value="<%:清空输出%>" onclick="document.getElementById('wt-out').textContent='';" />
+					<span class="wt-hint"><%:超时 6 秒/条，输出为原始回显%></span>
+				</div>
+			</div>
+		</div>
+	</form>
+
+	<div class="wt-at-box">
+		<h3><%:输出%></h3>
+		<pre class="wt-at-out" id="wt-out"><% if output ~= "" then %><%=luci.util.pcdata(output)%><% else %><span class="wt-empty"><%:尚无输出%></span><% end %></pre>
+	</div>
+
+</div>
+
+<script type="text/javascript">
+(function() {
+	var ta = document.querySelector('textarea.wt-at-input');
+	document.querySelectorAll('.wt-at-chips button').forEach(function(b) {
+		b.addEventListener('click', function() {
+			var c = b.getAttribute('data-cmd');
+			if (!ta.value.trim()) { ta.value = c; }
+			else { ta.value = ta.value.replace(/\s+$/, '') + '\n' + c; }
+			ta.focus();
+		});
+	});
+})();
+</script>
+
+<%+footer%>
