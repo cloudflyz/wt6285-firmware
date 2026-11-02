@@ -1,0 +1,36 @@
+name: Keep Toolchain Cache Alive
+
+# actions/cache 条目 7 天不访问即回收，每 5 天做一次 lookup-only 命中。
+
+on:
+  schedule:
+    - cron: '0 0 */5 * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Touch toolchain cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/dummy
+          key: keepalive-touch-toolchain-wt6285
+          restore-keys: |
+            ${{ format('{0}-{1}-', 'wt6285', 'toolchain') }}5.10-
+          lookup-only: true
+
+      - name: Touch download cache
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: /tmp/dummy
+          key: keepalive-touch-dl-wt6285
+          restore-keys: |
+            ${{ format('{0}-{1}-', 'wt6285', 'toolchain') }}5.10-
+          lookup-only: true

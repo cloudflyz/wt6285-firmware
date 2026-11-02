@@ -8,6 +8,14 @@ on:
         type: choice
         options: [configs/wt6285-lite.config, configs/wt6285.config]
         default: configs/wt6285-lite.config
+      slim_i18n:
+        description: "精简 luci-i18n 翻译包（体积优化）"
+        type: boolean
+        default: false
+      ssh:
+        description: "开启 tmate SSH 调试（仅仓库所有者）"
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 
@@ -17,6 +25,9 @@ permissions:
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  TZ: Asia/Shanghai
 
 jobs:
   build:
@@ -46,6 +57,13 @@ jobs:
             gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
             python3-setuptools rsync swig unzip zlib1g-dev file wget
 
+      - name: SSH debug (tmate)
+        if: inputs.ssh == true && github.actor == github.repository_owner
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30
+        with:
+          limit-access-to-actor: true
+
       - name: Cache downloads
         uses: actions/cache@v4
         with:
@@ -54,6 +72,27 @@ jobs:
           restore-keys: |
             dl-${{ matrix.kver }}-${{ hashFiles('upstream.lock') }}-
             dl-${{ matrix.kver }}-
+
+      # 工具链缓存：键跟 lean 提交与配置走，源码不变就命中
+      - name: Cache toolchain
+        id: tc
+        uses: actions/cache@v4
+        with:
+          path: |
+            lede/staging_dir/host
+            lede/staging_dir/hostpkg
+            lede/staging_dir/toolchain-*
+          key: ${{ format('{0}-{1}-{2}', 'wt6285', 'toolchain', matrix.kver) }}-${{ hashFiles('upstream.lock') }}
+          restore-keys: |
+            ${{ format('{0}-{1}-', 'wt6285', 'toolchain') }}
+
+      - name: Report toolchain cache
+        run: |
+          if [ "${{ steps.tc.outputs.cache-hit }}" = "true" ]; then
+            echo "工具链缓存命中，跳过工具链编译" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "工具链缓存未命中，本次完整编译工具链" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Clone lean at pinned commit
         run: |
@@ -130,6 +169,21 @@ jobs:
             echo "OK excluded $sym"
           done
 
+      - name: Slim i18n packages
+        if: inputs.slim_i18n == true
+        run: |
+          cd lede
+          before=$(grep -cE '^CONFIG_PACKAGE_luci-i18n-[A-Za-z0-9_.-]+-zh-cn=(y|m)$' .config || true)
+          sed -i -E 's/^(CONFIG_PACKAGE_luci-i18n-[A-Za-z0-9_.-]+-zh-cn)=(y|m)/# \1 is not set/' .config
+          for p in luci-i18n-base-zh-cn; do
+            sed -i "/^# CONFIG_PACKAGE_${p} is not set$/d" .config
+            echo "CONFIG_PACKAGE_${p}=y" >> .config
+          done
+          after=$(grep -cE '^CONFIG_PACKAGE_luci-i18n-[A-Za-z0-9_.-]+-zh-cn=y$' .config || true)
+          echo "zh-cn 翻译包: ${before} → ${after}" | tee -a "$GITHUB_STEP_SUMMARY"
+          grep -q '^CONFIG_PACKAGE_luci-base=y$' .config \
+            || { echo "::error::luci-base 被误删，中止"; exit 1; }
+
       - name: Build firmware
         run: |
           cd lede
@@ -180,3 +234,24 @@ jobs:
             out/*.bin
             out/SHA256SUMS-*.txt
             out/buildinfo-*.txt
+
+      # 只保留最近 3 个发布，其余连 tag 一起清理
+      - name: Cleanup old releases
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          KEEP=3
+          mapfile -t TAGS < <(gh release list --repo "$GITHUB_REPOSITORY" \
+            --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[].tagName')
+          echo "现有 Release: ${TAGS[*]}"
+          for i in "${!TAGS[@]}"; do
+            if [ "$i" -lt "$KEEP" ]; then
+              echo "保留: ${TAGS[$i]}"
+            else
+              echo "删除: ${TAGS[$i]}"
+              gh release delete "${TAGS[$i]}" --repo "$GITHUB_REPOSITORY" \
+                --cleanup-tag --yes </dev/null || true
+            fi
+          done
