@@ -1,0 +1,241 @@
+--- a/driver/apdu/at.c
++++ b/driver/apdu/at.c
+@@ -12,8 +12,11 @@
+ #include <string.h>
+ #include <unistd.h>
+ 
++#define ENV_AT_CSIM APDU_ENV_NAME(AT, CSIM)
++
+ static FILE *fuart;
+ static int logic_channel = 0;
++static int csim_mode = 0; /* 模块无逻辑通道时退化为 AT+CSIM */
+ static char *buffer;
+ 
+ static void enumerate_serial_device_linux(cJSON *data) {
+@@ -74,6 +77,14 @@
+     }
+     setbuf(fuart, NULL);
+ 
++    /* 显式开关：模块无逻辑通道（如 Quectel EC200A）时，
++     * 由 lpacctl.sh 导出 LPAC_APDU_AT_CSIM=1 直接走 AT+CSIM，
++     * 不再用 AT+CCHO=? 之类探测，避免串口回显错位导致误判。 */
++    if (getenv_or_default(ENV_AT_CSIM, false)) {
++        csim_mode = 1;
++        return 0;
++    }
++
+     fprintf(fuart, "AT+CCHO=?\r\n");
+     if (at_expect(NULL, NULL)) {
+         fprintf(stderr, "Device missing AT+CCHO support\n");
+@@ -97,6 +108,134 @@
+     fclose(fuart);
+     fuart = NULL;
+     logic_channel = 0;
++    csim_mode = 0;
++}
++
++/* 发送一条 CSIM APDU：必须读到 OK/ERROR 才返回，
++ * 否则残留的 OK 会和下一条命令的 echo 混在一起（实测会把 AT+CSIM 拆成 AT+C0）。 */
++static int csim_apdu(const uint8_t *tx, uint32_t tx_len, uint8_t **rx, uint32_t *rx_len) {
++    char *hexstr = NULL;
++    int ret = -1;
++    size_t cmd_len = tx_len * 2 + 32;
++    char *cmd = malloc(cmd_len);
++
++    *rx = NULL;
++    *rx_len = 0;
++
++    if (!cmd)
++        return -1;
++
++    int off = snprintf(cmd, cmd_len, "AT+CSIM=%u,\"", tx_len * 2);
++    for (uint32_t i = 0; i < tx_len; i++)
++        off += snprintf(cmd + off, cmd_len - off, "%02X", (uint8_t)(tx[i] & 0xFF));
++    snprintf(cmd + off, cmd_len - off, "\"\r\n");
++
++    fwrite(cmd, 1, strlen(cmd), fuart);
++    free(cmd);
++
++    /* 读到 OK 或 ERROR 为止，中途记下 +CSIM: 那一行 */
++    while (1) {
++        memset(buffer, 0, AT_BUFFER_SIZE);
++        if (!fgets(buffer, AT_BUFFER_SIZE, fuart))
++            goto out;
++        buffer[strcspn(buffer, "\r\n")] = 0;
++        if (getenv_or_default(ENV_AT_DEBUG, false))
++            printf("AT_DEBUG: %s\n", buffer);
++
++        if (strncmp(buffer, "+CSIM: ", 7) == 0) {
++            free(hexstr);
++            hexstr = strdup(buffer + 7);
++            continue;
++        }
++        if (strcmp(buffer, "OK") == 0) {
++            ret = 0;
++            goto out;
++        }
++        if (strcmp(buffer, "ERROR") == 0)
++            goto out;
++    }
++
++out:
++    if (ret == 0 && hexstr) {
++        char *part;
++        strtok(hexstr, ",");
++        part = strtok(NULL, ",");
++        if (part) {
++            if (part[0] == '"')
++                part++;
++            part[strcspn(part, "\"")] = '\0';
++
++            *rx_len = strlen(part) / 2;
++            *rx = malloc(*rx_len ? *rx_len : 1);
++            if (*rx) {
++                int n = euicc_hexutil_hex2bin_r(*rx, *rx_len, part, strlen(part));
++                if (n < 0) {
++                    free(*rx);
++                    *rx = NULL;
++                    *rx_len = 0;
++                    ret = -1;
++                } else {
++                    *rx_len = n;
++                }
++            } else {
++                ret = -1;
++            }
++        } else {
++            ret = -1;
++        }
++    }
++    free(hexstr);
++    return ret;
++}
++
++/* CSIM 模式：单条 APDU，遇 61xx 自动续传 GET RESPONSE */
++static int csim_transmit(uint8_t **rx, uint32_t *rx_len, const uint8_t *tx, uint32_t tx_len) {
++    uint8_t *acc = NULL;
++    uint32_t acc_len = 0;
++    uint8_t *stage = NULL;
++    uint32_t stage_len = 0;
++    const uint8_t *cur = tx;
++    uint32_t cur_len = tx_len;
++    uint8_t getresp[5] = {0x00, 0xC0, 0x00, 0x00, 0x00};
++    int round;
++
++    for (round = 0; round < 8; round++) {
++        if (csim_apdu(cur, cur_len, &stage, &stage_len))
++            goto err;
++        if (stage_len < 2)
++            goto err;
++
++        uint8_t *grown = realloc(acc, acc_len + stage_len);
++        if (!grown)
++            goto err;
++        acc = grown;
++        memcpy(acc + acc_len, stage, stage_len);
++        acc_len += stage_len;
++
++        uint8_t sw1 = stage[stage_len - 2];
++        uint8_t sw2 = stage[stage_len - 1];
++        free(stage);
++        stage = NULL;
++
++        if (sw1 == 0x61) {
++            getresp[4] = sw2 ? sw2 : 0x00;
++            cur = getresp;
++            cur_len = sizeof(getresp);
++            continue;
++        }
++        break;
++    }
++
++    *rx = acc;
++    *rx_len = acc_len;
++    return 0;
++
++err:
++    free(stage);
++    free(acc);
++    *rx = NULL;
++    *rx_len = 0;
++    return -1;
+ }
+ 
+ static int apdu_interface_transmit(struct euicc_ctx *ctx, uint8_t **rx, uint32_t *rx_len, const uint8_t *tx,
+@@ -109,6 +248,9 @@
+     *rx = NULL;
+     *rx_len = 0;
+ 
++    if (csim_mode)
++        return csim_transmit(rx, rx_len, tx, tx_len);
++
+     if (!logic_channel) {
+         return -1;
+     }
+@@ -165,6 +307,55 @@
+         return logic_channel;
+     }
+ 
++    if (csim_mode) {
++        uint8_t sel[5 + 255];
++        uint8_t *rx = NULL;
++        uint32_t rx_len = 0;
++
++        if (aid_len > 255)
++            return -1;
++        sel[0] = 0x00;
++        sel[1] = 0xA4;
++        sel[2] = 0x04;
++        sel[3] = 0x00;
++        sel[4] = aid_len;
++        memcpy(sel + 5, aid, aid_len);
++
++        if (csim_apdu(sel, 5 + aid_len, &rx, &rx_len))
++            return -1;
++        if (rx_len < 2) {
++            free(rx);
++            return -1;
++        }
++        /* SELECT 后卡会返回 61xx，必须把 FCI 取完，
++         * 否则后续 ES10 指令会被卡当成不完整的续传请求 */
++        uint8_t sw1 = rx[rx_len - 2];
++        uint8_t sw2 = rx[rx_len - 1];
++        free(rx);
++        rx = NULL;
++
++        while (sw1 == 0x61) {
++            uint8_t getresp[5] = {0x00, 0xC0, 0x00, 0x00, sw2 ? sw2 : 0x00};
++
++            if (csim_apdu(getresp, sizeof(getresp), &rx, &rx_len))
++                return -1;
++            if (rx_len < 2) {
++                free(rx);
++                return -1;
++            }
++            sw1 = rx[rx_len - 2];
++            sw2 = rx[rx_len - 1];
++            free(rx);
++            rx = NULL;
++        }
++
++        if (sw1 != 0x90)
++            return -1;
++
++        logic_channel = 1;
++        return logic_channel;
++    }
++
+     for (int i = 1; i <= 4; i++) {
+         fprintf(fuart, "AT+CCHC=%d\r\n", i);
+         at_expect(NULL, NULL);
+@@ -189,6 +380,10 @@
+     if (!logic_channel) {
+         return;
+     }
++    if (csim_mode) {
++        logic_channel = 0;
++        return;
++    }
+     fprintf(fuart, "AT+CCHC=%d\r\n", logic_channel);
+     at_expect(NULL, NULL);
+ }
