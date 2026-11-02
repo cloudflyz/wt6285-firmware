@@ -8,6 +8,10 @@ SMS_TOOL=/usr/bin/sms_tool
 at() { "$SMS_TOOL" -d "$AT_PORT" at "$1" 2>/dev/null; }
 
 start() {
+	# PDP 上下文设为双栈，否则只请求 IPv4，运营商不会下发 v6 地址。
+	# APN 留空表示沿用卡内默认 APN；网络不支持 v6 时会自动回落 IPv4。
+	at 'AT+CGDCONT=1,"IPV4V6",""' >/dev/null 2>&1
+
 	# 让模块进入 ECM 数据模式
 	at 'AT+QNETDEVCTL=3,1' >/dev/null 2>&1
 	sleep 2
