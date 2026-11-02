@@ -7,10 +7,11 @@ NRadio WT6285（鲲鹏cc）自用固件，基于 [coolsnowwolf/lede](https://git
 ## 特性
 
 - **双内核**：5.10（稳定，默认）/ 6.18（experimental，ramips testing 通道）
-- **eSIM 管理**：集成 `lpac`，AT 后端，可直接下载 / 启用 / 删除 profile
+- **eSIM 本机管理**：`esim.lua` 直接发裸 APDU，读 EID、列 profile、启用/禁用（不依赖 lpac、不联网）
 - **短信收发**：`sms-tool` + 通知脚本
 - **4G 拨号**：`quectel-cm-5G`，兼容 EC200A 系模块
-- **LuCI 面板**：状态 / SIM / eSIM / 短信 / 设置（含 IMEI 修改，二次确认）
+- **LuCI 面板**：状态 / SIM / eSIM / 短信 / AT 指令 / 设置（含 IMEI 修改与软硬复位）
+- **Vantage 主题 + 仪表盘**：控制台风格界面，`Ctrl+K` 命令面板，设备/上行/射频/终端概览
 - **构建可溯源**：固定 lean commit，CI 全程自动化，产物附 SHA256 与 buildinfo
 - **TLS 统一**：wpad、libopenssl、curl、wget 共用一套 OpenSSL 栈
 
@@ -31,12 +32,14 @@ NRadio WT6285（鲲鹏cc）自用固件，基于 [coolsnowwolf/lede](https://git
 
 | 组件 | 版本 | 说明 |
 | --- | --- | --- |
-| `lpac` | 2.3.0 | eUICC LPA，AT 后端，SM-DP+ 走 curl |
+| `esim.lua` | 自研 | 裸 APDU 管理 eSIM：EID / profile 列表 / 启用 / 禁用 |
 | `quectel-cm-5G` | 1.6.4 | Quectel 模块拨号（源自 Lienol/openwrt qmodem） |
 | `sms-tool` | 2022-03-21 | 短信收发（源自 `coolsnowwolf/packages` `utils/sms-tool`） |
-| `luci-app-wt6285` | — | 状态 / SIM / eSIM / 短信 / 设置面板 |
+| `luci-app-wt6285` | — | 状态 / SIM / eSIM / 短信 / AT 指令 / 设置 |
+| `luci-theme-vantage` | 1.0.12 | 默认主题（控制台风格，明暗双模） |
+| `luci-app-vantage` | 1.0.12 | 仪表盘（设备 / 上行 / 射频 / SSID / 终端） |
 
-TLS 栈：`wpad-basic-openssl` + `libopenssl` + `openssl-util` + `wget-ssl` + `LIBCURL_OPENSSL`，与 `curl`、`lpac` 共用一套 OpenSSL。
+TLS 栈：`wpad-basic-openssl` + `libopenssl` + `openssl-util` + `wget-ssl` + `LIBCURL_OPENSSL`，与 `curl`、`esim.lua` 的 HTTPS 依赖共用一套 OpenSSL。
 
 ## 内核
 
@@ -62,6 +65,7 @@ WAN6        proto=dhcpv6, device=usb0
 dhcp        dhcp.wan.ignore=1
 root 登录   root / password（lean default-settings 的初始密码，刷完立即改）
 无线 SSID   LEDE（lean 默认，未预设密码）
+默认主题    Vantage（luci.main.mediaurlbase=/luci-static/vantage）
 ```
 
 注意三点：
@@ -130,7 +134,9 @@ sysupgrade -n /tmp/wt6285-6.18-1e71a21-...-squashfs-sysupgrade.bin
 - **6.18 是 experimental**：走 ramips testing 通道，上游可能变更。`upstream.lock` 固定 SHA 保证可复现，但升级 lean 时需重新验证补丁是否仍可应用。
 - **镜像不是字节级可复现**：本地与 CI 编译路径不同（`/root/...` vs `/home/runner/...`），路径字符串进入内核导致哈希不同，功能等价。需要字节一致得统一构建目录并设 `SOURCE_DATE_EPOCH`。
 - **体积余量有限**：6.18 镜像 11.75 MiB / 分区 15.44 MiB，剩约 3.69 MiB。加包前先算余量。
-- **lpac 依赖名易漂移**：目前 `PKG_BUILD_DEPENDS:=curl`（源包名）+ `DEPENDS:=+libcurl`（二进制包名）。上游 curl 包已在新版本改名 `libcurl4`，升级 lean 时两个名字要一起改，否则 lpac 会静默失去 https 能力。
+- **eSIM 只能做本地操作**：EC200A 不支持 `AT+CCHO`/`AT+CCHC`/`AT+CGLA`，本机只能走单条 `AT+CSIM`，因此**启用/禁用/列 profile 可以，下载与删除不行**（需要完整 ES10 会话）。下载请用手机 App 或 PC/SC 读卡器。
+- **`AT+CGATT=0` 会让 EC200A 失联**：实测该指令会把 AT 通道弄哑、4G 掉线，需硬复位恢复。因此漫游流量熔断不能用它，只能走 netifd 层（`ifdown wan` + APN DONTUSE + nft）。
+- **切换 profile 会短暂断网**：启用/禁用后模块需 USB 重枚举才能重新附着，约 30 秒，期间 4G 中断、IP 可能变化（LAN/LuCI 不受影响）。
 
 ## 构建优化记录（2026-11-02）
 
@@ -166,7 +172,9 @@ upstream.lock  pinned lean commit
 - [x] P3 LuCI 页面（状态 / SIM / eSIM / 短信 / 设置）
 - [x] P4 本地双内核编译通过，产物归档
 - [x] P5 Release 发布与文档固化
-- [ ] P6 实机刷写验证（4G 拨号 / 短信 / eSIM / WiFi）
+- [x] P6 实机验证：4G 拨号、eSIM 读卡与启用禁用、LuCI 各页、软硬复位
+- [x] P7 Vantage 主题与仪表盘
+- [ ] P8 下载/删除 profile（需 PC/SC 读卡器）
 
 ## License
 
