@@ -36,6 +36,12 @@ function action_restart()
 	luci.http.redirect(luci.dispatcher.build_url("admin/modem/wt6285/status") .. "?restarted=1")
 end
 
+-- 硬复位：USB authorized 0/1，强制重新枚举
+function action_restart_hard()
+	luci.sys.call("/usr/libexec/wt6285/modem-restart.sh --hard >/tmp/wt6285-restart.log 2>&1 &")
+	luci.http.redirect(luci.dispatcher.build_url("admin/modem/wt6285/status") .. "?restarted=hard")
+end
+
 function index()
 	if not nixio.fs.access("/usr/libexec/wt6285/status.sh") then
 		return
@@ -49,5 +55,6 @@ function index()
 	entry({"admin", "modem", "wt6285", "sms"}, template("wt6285/sms"), _("短信"), 40)
 	entry({"admin", "modem", "wt6285", "at"}, call("action_at"), _("AT 指令"), 45)
 	entry({"admin", "modem", "wt6285", "restart"}, call("action_restart"))
+	entry({"admin", "modem", "wt6285", "restart-hard"}, call("action_restart_hard"))
 	entry({"admin", "modem", "wt6285", "settings"}, cbi("wt6285/settings"), _("设置"), 50)
 end
