@@ -30,6 +30,12 @@ function action_at()
 	})
 end
 
+-- 重启 4G 模块（后台执行，页面立即返回）
+function action_restart()
+	luci.sys.call("/usr/libexec/wt6285/modem-restart.sh >/tmp/wt6285-restart.log 2>&1 &")
+	luci.http.redirect(luci.dispatcher.build_url("admin/modem/wt6285/status") .. "?restarted=1")
+end
+
 function index()
 	if not nixio.fs.access("/usr/libexec/wt6285/status.sh") then
 		return
@@ -42,5 +48,6 @@ function index()
 	entry({"admin", "modem", "wt6285", "esim"}, template("wt6285/esim"), _("eSIM"), 30)
 	entry({"admin", "modem", "wt6285", "sms"}, template("wt6285/sms"), _("短信"), 40)
 	entry({"admin", "modem", "wt6285", "at"}, call("action_at"), _("AT 指令"), 45)
+	entry({"admin", "modem", "wt6285", "restart"}, call("action_restart"))
 	entry({"admin", "modem", "wt6285", "settings"}, cbi("wt6285/settings"), _("设置"), 50)
 end
