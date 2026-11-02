@@ -80,11 +80,15 @@ end
 .wt-kv .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .wt-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .wt-hint { font-size: 12px; opacity: .6; }
+.wt-banner { border: 1px solid rgba(46,204,113,.55); background: rgba(46,204,113,.12); color: inherit; border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; font-size: 13px; }
 </style>
 
 <h2 name="content"><%:移远模块 · 状态%></h2>
 
 <div class="wt-wrap">
+<% if luci.http.formvalue("restarted") then %>
+	<div class="wt-banner"><%:已下发重启，模块约 20 秒后重新枚举，期间 4G 会短暂中断。%></div>
+<% end %>
 
 	<div class="wt-cards">
 		<div class="wt-card">
@@ -150,6 +154,10 @@ end
 			<option value="30">30 <%:秒%></option>
 			<option value="60">60 <%:秒%></option>
 		</select>
+		<form method="post" action="<%=luci.dispatcher.build_url("admin/modem/wt6285/restart")%>" style="display:inline"
+			onsubmit="return confirm('确认重启 4G 模块？约 20 秒，期间 4G 中断。');">
+			<input class="cbi-button cbi-button-reset" type="submit" value="<%:重启模块%>" />
+		</form>
 		<span class="wt-hint"><%:自动刷新仅在页面停留时生效%></span>
 	</div>
 
