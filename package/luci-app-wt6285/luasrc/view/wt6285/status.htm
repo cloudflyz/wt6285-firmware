@@ -1,36 +1,172 @@
 <%
 local sys = require "luci.sys"
-local out = sys.exec("/usr/libexec/wt6285/status.sh 2>/dev/null")
+
+local out = sys.exec("timeout 12 /usr/libexec/wt6285/status.sh 2>/dev/null")
 local kv = {}
 for line in out:gmatch("[^\n]+") do
 	local k, v = line:match("^([%w_]+)=(.*)$")
 	if k then kv[k] = v end
 end
-local function row(name, key)
-	%>
-	<tr class="tr"><th class="th" style="width:30%"><%=name%></th><td class="td"><%=kv[key] and #kv[key] > 0 and kv[key] or "-"%></td></tr>
-	<%
+
+local function v(key, def)
+	local s = kv[key]
+	if s == nil or s == "" then return def or "-" end
+	return s
+end
+
+-- 信号
+local csq = tonumber((kv.csq or ""):match("^(%d+)")) or 0
+local pct = math.min(100, math.floor(csq / 31 * 100))
+local bars = math.min(5, math.ceil(csq / 31 * 5))
+local rssi = (csq > 0 and csq < 99) and (-113 + 2 * csq) or nil
+
+-- 注册状态
+local creg_stat = tonumber((kv.creg or ""):match("^%s*%d+,%s*(%d+)"))
+local creg_txt = ({
+	[0] = "未注册", [1] = "已注册（本地）", [2] = "搜索中",
+	[3] = "注册被拒", [4] = "未知", [5] = "已注册（漫游）"
+})[creg_stat] or "未注册"
+local creg_ok = (creg_stat == 1 or creg_stat == 5)
+
+-- 运营商
+local cops = v("cops")
+cops = cops:gsub('^%s*%d*,%d*,', ''):gsub('"', '')
+if cops == "" then cops = "-" end
+
+-- 数据连接
+local wan_up = (v("wan_up") == "1")
+local usb0_ip = v("usb0_ip")
+local has_ip = (usb0_ip ~= "-")
+
+-- SIM
+local sim_sel = v("sim_sel")
+local sim_name = ({ ["0"] = "外置卡", ["1"] = "内置 SIM1", ["2"] = "内置 SIM2" })[sim_sel] or ("槽位 " .. sim_sel)
+local iccid = v("iccid")
+local sim_ok = (iccid ~= "-")
+
+-- 运行时间
+local up = tonumber(kv.uptime or "0") or 0
+local function dur(s)
+	local d, h, m = math.floor(s/86400), math.floor(s%86400/3600), math.floor(s%3600/60)
+	if d > 0 then return string.format("%d 天 %d 小时", d, h) end
+	if h > 0 then return string.format("%d 小时 %d 分", h, m) end
+	return string.format("%d 分", m)
 end
 %>
 
 <%+header%>
-<h2 name="content"><%:模块状态%></h2>
-<div class="cbi-map">
-	<table class="cbi-section-table">
-		<% row("IMEI", "imei") %>
-		<% row("ICCID", "iccid") %>
-		<% row("运营商", "cops") %>
-		<% row("注册状态", "creg") %>
-		<% row("信号 (CSQ)", "csq") %>
-		<% row("信号 (QCSQ)", "qcsq") %>
-		<% row("频段信息", "nwinfo") %>
-		<% row("功能等级 (CFUN)", "cfun") %>
-		<% row("SIM 选择", "sim_sel") %>
-		<% row("WAN 状态", "wan_up") %>
-		<% row("usb0 地址", "usb0_ip") %>
-	</table>
-	<div class="cbi-page-actions">
-		<input class="cbi-button cbi-button-apply" type="button" value="<%:刷新%>" onclick="location.reload()" />
+
+<style>
+.wt-wrap { max-width: 980px; }
+.wt-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px; margin: 0 0 18px; }
+.wt-card { border: 1px solid rgba(127,127,127,.28); border-radius: 10px; padding: 14px 16px; background: rgba(127,127,127,.06); }
+.wt-card .lbl { font-size: 12px; opacity: .62; letter-spacing: .04em; text-transform: uppercase; }
+.wt-card .val { font-size: 22px; font-weight: 600; margin-top: 6px; line-height: 1.25; word-break: break-all; }
+.wt-card .sub { font-size: 12px; opacity: .7; margin-top: 6px; }
+.wt-bars { display: flex; align-items: flex-end; gap: 3px; height: 26px; margin-top: 8px; }
+.wt-bars i { width: 7px; border-radius: 2px; background: rgba(127,127,127,.3); }
+.wt-bars i.on { background: #2ecc71; }
+.wt-bars i:nth-child(1) { height: 20%; } .wt-bars i:nth-child(2) { height: 40%; }
+.wt-bars i:nth-child(3) { height: 60%; } .wt-bars i:nth-child(4) { height: 80%; }
+.wt-bars i:nth-child(5) { height: 100%; }
+.wt-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+.wt-ok { background: #2ecc71; } .wt-bad { background: #e74c3c; } .wt-warn { background: #f39c12; }
+.wt-sec { border: 1px solid rgba(127,127,127,.28); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+.wt-sec h3 { margin: 0; padding: 11px 16px; font-size: 14px; font-weight: 600; background: rgba(127,127,127,.09); border-bottom: 1px solid rgba(127,127,127,.22); }
+.wt-kv { display: grid; grid-template-columns: 180px 1fr; }
+.wt-kv > div { padding: 9px 16px; border-bottom: 1px solid rgba(127,127,127,.14); font-size: 13px; }
+.wt-kv > div:nth-child(odd) { opacity: .68; }
+.wt-kv > div:nth-last-child(-n+2) { border-bottom: none; }
+.wt-kv .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.wt-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.wt-hint { font-size: 12px; opacity: .6; }
+</style>
+
+<h2 name="content"><%:移远模块 · 状态%></h2>
+
+<div class="wt-wrap">
+
+	<div class="wt-cards">
+		<div class="wt-card">
+			<div class="lbl"><%:信号强度%></div>
+			<div class="val"><%=(csq > 0 and csq < 99) and (rssi .. " dBm") or "无信号"%></div>
+			<div class="wt-bars">
+				<% for i = 1, 5 do %><i class="<%= (i <= bars) and "on" or "" %>"></i><% end %>
+			</div>
+			<div class="sub">CSQ <%=(csq > 0 and csq < 99) and csq or "-"%> / 31 · <%=pct%>%</div>
+		</div>
+
+		<div class="wt-card">
+			<div class="lbl"><%:网络注册%></div>
+			<div class="val"><span class="wt-dot <%= creg_ok and "wt-ok" or "wt-bad" %>"></span><%=creg_txt%></div>
+			<div class="sub"><%=cops%></div>
+			<div class="sub"><%=v("qcsq")%></div>
+		</div>
+
+		<div class="wt-card">
+			<div class="lbl"><%:数据连接%></div>
+			<div class="val"><span class="wt-dot <%= wan_up and "wt-ok" or "wt-bad" %>"></span><%= wan_up and "已联通" or "未联通" %></div>
+			<div class="sub mono"><%= has_ip and usb0_ip or "usb0 无地址" %></div>
+			<div class="sub">CFUN <%=v("cfun")%></div>
+		</div>
+
+		<div class="wt-card">
+			<div class="lbl"><%:SIM 卡%></div>
+			<div class="val"><span class="wt-dot <%= sim_ok and "wt-ok" or "wt-warn" %>"></span><%= sim_ok and "已识别" or "未识别" %></div>
+			<div class="sub"><%=sim_name%></div>
+			<div class="sub mono"><%=iccid%></div>
+		</div>
 	</div>
+
+	<div class="wt-sec">
+		<h3><%:模块信息%></h3>
+		<div class="wt-kv">
+			<div><%:IMEI%></div><div class="mono"><%=v("imei")%></div>
+			<div><%:ICCID%></div><div class="mono"><%=iccid%></div>
+			<div><%:运营商%></div><div><%=cops%></div>
+			<div><%:注册状态%></div><div><%=creg_txt%> <span class="wt-hint">(CREG <%=v("creg")%>)</span></div>
+			<div><%:小区信息%></div><div><%=v("nwinfo")%></div>
+			<div><%:信号%></div><div>CSQ <%=v("csq")%> · QCSQ <%=v("qcsq")%></div>
+			<div><%:功能等级%></div><div>CFUN <%=v("cfun")%></div>
+			<div><%:SIM 槽位%></div><div><%=sim_name%></div>
+		</div>
+	</div>
+
+	<div class="wt-sec">
+		<h3><%:链路%></h3>
+		<div class="wt-kv">
+			<div><%:WAN 状态%></div><div><%= wan_up and "up" or "down" %></div>
+			<div><%:usb0 地址%></div><div class="mono"><%=has_ip and usb0_ip or "-"%></div>
+			<div><%:系统运行%></div><div><%=dur(up)%></div>
+			<div><%:数据卡%></div><div class="mono"><%= (sys.exec("uci -q get lpac.main.at_device 2>/dev/null") or ""):gsub("%s+$","") %></div>
+		</div>
+	</div>
+
+	<div class="wt-actions">
+		<input class="cbi-button cbi-button-apply" type="button" value="<%:立即刷新%>" onclick="location.reload()" />
+		<select class="cbi-input-select" id="wt-auto" style="width:auto">
+			<option value="0"><%:不自动刷新%></option>
+			<option value="10">10 <%:秒%></option>
+			<option value="30">30 <%:秒%></option>
+			<option value="60">60 <%:秒%></option>
+		</select>
+		<span class="wt-hint"><%:自动刷新仅在页面停留时生效%></span>
+	</div>
+
 </div>
+
+<script type="text/javascript">
+(function() {
+	var sel = document.getElementById('wt-auto');
+	var KEY = 'wt6285-autorefresh';
+	var saved = window.localStorage ? localStorage.getItem(KEY) : null;
+	if (saved) { sel.value = saved; }
+	sel.addEventListener('change', function() {
+		if (window.localStorage) { localStorage.setItem(KEY, sel.value); }
+	});
+	var n = parseInt(sel.value, 10);
+	if (n > 0) { setTimeout(function() { location.reload(); }, n * 1000); }
+})();
+</script>
+
 <%+footer%>
