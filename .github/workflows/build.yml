@@ -112,6 +112,14 @@ jobs:
           git checkout "$TARGET_SHA"
           echo "LEAN_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
+      # 把各 feed 钉到 feeds.conf 里记录的提交，避免上游变动
+      - name: Pin feeds
+        run: |
+          cp feeds.conf lede/feeds.conf.default
+          echo "--- 钉住的 feed ---"
+          grep -c '\^' lede/feeds.conf.default
+          grep 'src-git' lede/feeds.conf.default
+
       - name: Update and install feeds
         run: |
           cd lede
