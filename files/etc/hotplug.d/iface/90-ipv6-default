@@ -1,0 +1,13 @@
+#!/bin/sh
+# wan6 起来后补一条「不限源」的 IPv6 默认路由。
+# 背景：运营商只给单个 /64 时，netifd 只装 "default from <prefix>"，
+#       LAN 的 ULA 源匹配不到，转发流量会没有默认路由。
+[ "$ACTION" = "ifup" ] || exit 0
+[ "$INTERFACE" = "wan6" ] || exit 0
+
+GW="$(ip -6 route | sed -n 's/.*default from [^ ]* via \([^ ]*\) dev usb0.*/\1/p' | head -1)"
+[ -n "$GW" ] || exit 0
+
+ip -6 route replace default via "$GW" dev usb0 metric 512
+logger -t ipv6-default "default via $GW installed for forwarding"
+exit 0
