@@ -60,9 +60,15 @@ NTP         ntp.aliyun.com、ntp.tencent.com（不对外提供 NTP 服务）
 WAN         proto=dhcp, device=usb0
 WAN6        proto=dhcpv6, device=usb0
 dhcp        dhcp.wan.ignore=1
+root 登录   root / password（lean default-settings 的初始密码，刷完立即改）
+无线 SSID   LEDE（lean 默认，未预设密码）
 ```
 
-注意两点：刷机时勾选「保留配置」则沿用旧 IP；设备已初始化过则脚本不再执行（需 `firstboot` 重置）。
+注意三点：
+
+- 刷机时勾选「保留配置」则沿用旧 IP；设备已初始化过则脚本不再执行（需 `firstboot` 重置）。
+- **root 初始密码是 `password`**（来自 lean 的 `default-settings`，不是空密码）。镜像里 `/etc/shadow` 首次启动前是空哈希，所以直接看镜像会误以为无密码；LuCI 用空密码登录会被拒。
+- 首次登录后立刻改密码：LuCI「系统 → 管理权」，或 SSH 里执行 `passwd`。
 
 ## 构建
 
