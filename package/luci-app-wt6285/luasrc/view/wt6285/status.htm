@@ -86,8 +86,11 @@ end
 <h2 name="content"><%:移远模块 · 状态%></h2>
 
 <div class="wt-wrap">
-<% if luci.http.formvalue("restarted") then %>
-	<div class="wt-banner"><%:已下发重启，模块约 20 秒后重新枚举，期间 4G 会短暂中断。%></div>
+<% local rs = luci.http.formvalue("restarted") %>
+<% if rs == "hard" then %>
+	<div class="wt-banner"><%:已下发硬复位（USB 重新枚举），约 30 秒恢复，期间 4G 中断。%></div>
+<% elseif rs then %>
+	<div class="wt-banner"><%:已下发软复位，模块约 20 秒后重新就绪。%></div>
 <% end %>
 
 	<div class="wt-cards">
@@ -156,7 +159,11 @@ end
 		</select>
 		<form method="post" action="<%=luci.dispatcher.build_url("admin/modem/wt6285/restart")%>" style="display:inline"
 			onsubmit="return confirm('确认重启 4G 模块？约 20 秒，期间 4G 中断。');">
-			<input class="cbi-button cbi-button-reset" type="submit" value="<%:重启模块%>" />
+			<input class="cbi-button cbi-button-reset" type="submit" value="<%:软复位%>" />
+		</form>
+		<form method="post" action="<%=luci.dispatcher.build_url("admin/modem/wt6285/restart-hard")%>" style="display:inline"
+			onsubmit="return confirm('确认硬复位？USB 设备会被摘掉再挂回，约 30 秒，期间 4G 完全中断。');">
+			<input class="cbi-button cbi-button-reset" type="submit" value="<%:硬复位%>" />
 		</form>
 		<span class="wt-hint"><%:自动刷新仅在页面停留时生效%></span>
 	</div>
