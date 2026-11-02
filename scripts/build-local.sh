@@ -32,6 +32,19 @@ fi
 # 2) 下载缓存放在 lede 之外，make dirclean 不会清掉
 mkdir -p "$DL_CACHE"
 
+# 2.5) 把仓库里的自定义包与 rootfs overlay 同步进 lede（CI 有同样步骤）
+for d in "$REPO"/package/*/; do
+	[ -d "$d" ] || continue
+	name=$(basename "$d")
+	rm -rf "$LEDE/package/$name"
+	cp -a "$d" "$LEDE/package/$name"
+done
+if [ -d "$REPO/files" ]; then
+	mkdir -p "$LEDE/package/base-files/files"
+	cp -a "$REPO/files/." "$LEDE/package/base-files/files/"
+fi
+echo "[build-local] synced package/ + files/ from repo"
+
 make -C "$LEDE" DL_DIR="$DL_CACHE" -j"$JOBS" "$@"
 
 # 3) 全量构建后按内核版本重命名归档，避免 5.10 / 6.18 同名产物互相覆盖
