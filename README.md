@@ -137,7 +137,7 @@ sysupgrade -n /tmp/wt6285-6.18-1e71a21-...-squashfs-sysupgrade.bin
 | CI 缓存 key 含 `configs/**`，改配置即重下 1 GB | 只按 `upstream.lock` 计算 |
 | 5.10 与 6.18 产物同名互相覆盖 | 本地与 CI 均按 `wt6285-<kver>-<sha>-*` 命名 |
 | 6.18 配置缺 `CONFIG_TESTING_KERNEL=y`，实际编出 5.10 | 写入配置并断言 |
-| 6.18 首版混入 ssr-plus | 只写 `CONFIG_DEFAULT_... is not set` 不够，须写 `CONFIG_PACKAGE_luci-app-ssr-plus is not set` |
+| 首版混入 Lean 默认选中的非预期包 | 只写 `CONFIG_DEFAULT_... is not set` 只能关掉默认选中，须写 `CONFIG_PACKAGE_... is not set` 才真正排除 |
 | TLS 栈混用 mbedtls / openssl | 三份配置统一到 OpenSSL |
 | CI matrix 无 6.18 任务 | 增加 `kver: "6.18"` 条目 |
 
