@@ -134,7 +134,7 @@ jobs:
         run: |
           cd lede
           mkdir -p ../out
-          find bin/targets/ramips/mt76x8 -maxdepth 1 -name '*sysupgrade.bin' -exec cp {} ../out/ \;
+          find bin/targets/ramips/mt76x8 -maxdepth 1 \( -name '*sysupgrade.bin' -o -name '*initramfs-kernel.bin' \) -exec cp {} ../out/ \;
           cd ../out
           for f in *.bin; do
             mv "$f" "wt6285-${{ matrix.kver }}-${LEAN_SHA:0:7}-${f}"
@@ -144,9 +144,9 @@ jobs:
             echo "kernel=${{ matrix.kver }}"
             echo "built_at=$(date -u +%FT%TZ)"
             echo "runner=${ImageOS}"
-          } > buildinfo.txt
+          } > buildinfo-${{ matrix.kver }}.txt
           ls -lh
-          sha256sum * > SHA256SUMS.txt
+          sha256sum *.bin buildinfo-${{ matrix.kver }}.txt > SHA256SUMS-${{ matrix.kver }}.txt
 
       - name: Check image size
         run: |
@@ -163,8 +163,8 @@ jobs:
           name: wt6285-${{ matrix.kver }}
           path: |
             out/*.bin
-            out/SHA256SUMS.txt
-            out/buildinfo.txt
+            out/SHA256SUMS-*.txt
+            out/buildinfo-*.txt
           if-no-files-found: error
 
       - name: Publish release
@@ -173,5 +173,5 @@ jobs:
         with:
           files: |
             out/*.bin
-            out/SHA256SUMS.txt
-            out/buildinfo.txt
+            out/SHA256SUMS-*.txt
+            out/buildinfo-*.txt
