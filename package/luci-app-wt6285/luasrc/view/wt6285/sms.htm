@@ -89,19 +89,30 @@ end
 local msgs = {}
 if act == "" or act == "refresh" then
 	local out = sys.exec(string.format(
-		"flock -x %s /usr/bin/sms_tool -d %s recv -j 2>/dev/null", LOCK, DEV))
-	for line in out:gmatch("[^\n]+") do
-		local idx = line:match('"index"%s*:%s*(%d+)')
-		local num = line:match('"number"%s*:%s*"([^"]*)"')
-		local txt = line:match('"text"%s*:%s*"([^"]*)"')
-		local date = line:match('"date"%s*:%s*"([^"]*)"')
-		local stat = line:match('"stat"%s*:%s*(%d+)')
+		"flock -x %s /usr/bin/sms_tool -d %s -s %s recv 2>/dev/null", LOCK, DEV, uci("storage", "SM")))
+	-- sms_tool 的 -j 在本版本不生效，输出是纯文本，按 MSG/From/Date-Time 分块解析
+	local cur = nil
+	for line in (out .. "\n"):gmatch("([^\n]*)\n") do
+		local idx = line:match("^MSG:%s*(%d+)")
+		local frm = line:match("^From:%s*(.*)$")
+		local dt = line:match("^Date/Time:%s*(.*)$")
 		if idx then
-			msgs[#msgs + 1] = {
-				index = idx, number = num or "", text = txt or "",
-				date = date or "", unread = (stat == "0")
-			}
+			if cur then msgs[#msgs + 1] = cur end
+			cur = { index = idx, number = "", text = "", date = "", unread = false }
+		elseif cur then
+			if frm then
+				cur.number = frm
+			elseif dt and cur.date == "" then
+				cur.date = dt
+			else
+				if cur.text == "" then cur.text = line else cur.text = cur.text .. "\n" .. line end
+			end
 		end
+	end
+	if cur then msgs[#msgs + 1] = cur end
+	for _, m in ipairs(msgs) do
+		m.text = m.text:gsub("^%s+", ""):gsub("%s+$", "")
+		m.number = m.number:gsub("^%s+", ""):gsub("%s+$", "")
 	end
 end
 %>
