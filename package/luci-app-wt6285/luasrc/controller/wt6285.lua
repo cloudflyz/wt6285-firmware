@@ -5,7 +5,8 @@ function index()
 		return
 	end
 
-	entry({"admin", "modem", "wt6285"}, firstchild(), _("WT6285 模块"), 60).dependent = false
+	entry({"admin", "modem"}, firstchild(), _("移远模块"), 60).dependent = false
+	entry({"admin", "modem", "wt6285"}, firstchild(), _("WT6285"), 10).dependent = false
 	entry({"admin", "modem", "wt6285", "status"}, template("wt6285/status"), _("状态"), 10)
 	entry({"admin", "modem", "wt6285", "sim"}, cbi("wt6285/sim"), _("SIM 选择"), 20)
 	entry({"admin", "modem", "wt6285", "esim"}, template("wt6285/esim"), _("eSIM"), 30)
