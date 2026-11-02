@@ -4,6 +4,20 @@ local function shquote(s)
 	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
+-- eSIM：启用/禁用 profile（本机发 APDU，不联网）
+function action_esim()
+	local act = luci.http.formvalue("act") or ""
+	local iccid = (luci.http.formvalue("iccid") or ""):gsub("[^0-9]", "")
+
+	if (act == "enable" or act == "disable") and #iccid >= 18 then
+		luci.sys.exec(string.format(
+			"flock -x /var/lock/wt6285-at.lock lua /usr/libexec/wt6285/esim.lua %s %s >/tmp/wt6285-esim.log 2>&1",
+			act, iccid))
+	end
+
+	luci.template.render("wt6285/esim")
+end
+
 -- AT 指令控制台：逐行执行，带 6 秒超时
 function action_at()
 	local cmd = luci.http.formvalue("cmd") or ""
@@ -51,7 +65,7 @@ function index()
 	entry({"admin", "modem", "wt6285"}, firstchild(), _("WT6285"), 10).dependent = false
 	entry({"admin", "modem", "wt6285", "status"}, template("wt6285/status"), _("状态"), 10)
 	entry({"admin", "modem", "wt6285", "sim"}, cbi("wt6285/sim"), _("SIM 选择"), 20)
-	entry({"admin", "modem", "wt6285", "esim"}, template("wt6285/esim"), _("eSIM"), 30)
+	entry({"admin", "modem", "wt6285", "esim"}, call("action_esim"), _("eSIM"), 30)
 	entry({"admin", "modem", "wt6285", "sms"}, template("wt6285/sms"), _("短信"), 40)
 	entry({"admin", "modem", "wt6285", "at"}, call("action_at"), _("AT 指令"), 45)
 	entry({"admin", "modem", "wt6285", "restart"}, call("action_restart"))

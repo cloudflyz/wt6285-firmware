@@ -1,64 +1,149 @@
 <%
 local sys = require "luci.sys"
 local http = require "luci.http"
-local action = http.formvalue("action")
-local iccid = http.formvalue("iccid")
-local smdp = http.formvalue("smdp")
-local code = http.formvalue("code")
 
-if action == "enable" and iccid then
-	sys.call("/usr/libexec/wt6285/lpacctl.sh profile enable " .. iccid .. " >/dev/null 2>&1")
-elseif action == "disable" and iccid then
-	sys.call("/usr/libexec/wt6285/lpacctl.sh profile disable " .. iccid .. " >/dev/null 2>&1")
-elseif action == "delete" and iccid then
-	sys.call("/usr/libexec/wt6285/lpacctl.sh profile delete " .. iccid .. " >/dev/null 2>&1")
-elseif action == "download" and smdp and code then
-	sys.call("/usr/libexec/wt6285/lpacctl.sh profile download -s " .. smdp .. " -m " .. code .. " >/dev/null 2>&1")
+local SCRIPT = "/usr/libexec/wt6285/esim.lua"
+local LOCK = "/var/lock/wt6285-at.lock"
+
+local function run_esim(args)
+	return sys.exec("flock -x " .. LOCK .. " lua " .. SCRIPT .. " " .. args .. " 2>&1")
 end
 
-local epoch = tonumber(sys.exec("date +%s") or "0") or 0
-local clock_ok = epoch > 1700000000
-local list = sys.exec("/usr/libexec/wt6285/lpacctl.sh profile list 2>&1")
+-- 读取 EID
+local eid = ""
+do
+	local out = run_esim("info")
+	eid = out:match("eid=([0-9A-Fa-f]+)") or ""
+	if eid == "" then
+		local err = out:match("error=([%w_]+)") or "unknown"
+		eid = "读取失败: " .. err
+	end
+end
+
+-- 读取 profile 列表
+local profiles = {}
+local list_err = nil
+do
+	local out = run_esim("list")
+	if out:match("error=") then
+		list_err = out:match("error=([%w_]+)")
+	else
+		for line in out:gmatch("[^\n]+") do
+			local v = line:match("^p=(.*)$")
+			if v then
+				local iccid, state, name, aid = v:match("^([^|]*)|([^|]*)|([^|]*)|(.*)$")
+				profiles[#profiles + 1] = {
+					iccid = iccid or "",
+					state = state or "",
+					name = name or "",
+					aid = aid or ""
+				}
+			end
+		end
+	end
+end
+
+local action = http.formvalue("act") or ""
+local acted_iccid = http.formvalue("iccid") or ""
+local result_msg, result_ok = nil, false
+if action == "enable" or action == "disable" then
+	local out = run_esim(action .. " " .. (acted_iccid:gsub("[^0-9]", "")))
+	result_ok = out:match("result=ok") ~= nil
+	result_msg = result_ok
+		and ((action == "enable") and "已下发启用，模块正在重新搜网（约 20 秒）" or "已下发禁用，模块正在重新搜网（约 20 秒）")
+		or ("操作失败：" .. (out:match("error=([^\n]+)") or out))
+end
 %>
 
 <%+header%>
-<h2 name="content"><%:eSIM Profile%></h2>
 
-<div class="cbi-section">
-	<h3><%:已安装%></h3>
-	<pre style="white-space:pre-wrap"><%=list%></pre>
+<style>
+.wt-wrap { max-width: 980px; }
+.wt-card { border: 1px solid rgba(127,127,127,.28); border-radius: 10px; padding: 14px 16px; background: rgba(127,127,127,.06); margin-bottom: 16px; }
+.wt-card .lbl { font-size: 12px; opacity: .62; letter-spacing: .04em; text-transform: uppercase; }
+.wt-card .val { font-size: 15px; margin-top: 6px; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.wt-sec { border: 1px solid rgba(127,127,127,.28); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+.wt-sec h3 { margin: 0; padding: 11px 16px; font-size: 14px; font-weight: 600; background: rgba(127,127,127,.09); border-bottom: 1px solid rgba(127,127,127,.22); }
+table.wt-p { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.wt-p th, table.wt-p td { padding: 9px 12px; text-align: left; border-bottom: 1px solid rgba(127,127,127,.14); }
+table.wt-p th { font-weight: 600; opacity: .7; font-size: 12px; }
+table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.wt-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.wt-on { background: rgba(46,204,113,.16); color: #1e8449; }
+.wt-off { background: rgba(127,127,127,.18); opacity: .8; }
+.wt-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; }
+.wt-banner-ok { border: 1px solid rgba(46,204,113,.55); background: rgba(46,204,113,.12); }
+.wt-banner-err { border: 1px solid rgba(231,76,60,.55); background: rgba(231,76,60,.12); }
+.wt-hint { font-size: 12px; opacity: .6; }
+</style>
+
+<h2 name="content"><%:移远模块 · eSIM%></h2>
+
+<div class="wt-wrap">
+
+<% if result_msg then %>
+	<div class="wt-banner <%= result_ok and "wt-banner-ok" or "wt-banner-err" %>"><%=luci.util.pcdata(result_msg)%></div>
+<% end %>
+
+	<div class="wt-card">
+		<div class="lbl"><%:eUICC EID%></div>
+		<div class="val"><%=luci.util.pcdata(eid)%></div>
+	</div>
+
+	<div class="wt-sec">
+		<h3><%:配置文件%></h3>
+<% if list_err then %>
+		<div style="padding:14px 16px" class="wt-hint"><%:读取失败%>：<%=luci.util.pcdata(list_err)%></div>
+<% elseif #profiles == 0 then %>
+		<div style="padding:14px 16px" class="wt-hint"><%:卡内没有配置文件%></div>
+<% else %>
+		<table class="wt-p">
+			<tr>
+				<th style="width:36%"><%:ICCID%></th>
+				<th style="width:22%"><%:名称%></th>
+				<th style="width:14%"><%:状态%></th>
+				<th style="width:28%"><%:操作%></th>
+			</tr>
+<% for _, p in ipairs(profiles) do %>
+			<tr>
+				<td class="mono"><%=luci.util.pcdata(p.iccid)%></td>
+				<td><%=luci.util.pcdata(p.name ~= "" and p.name or "-")%></td>
+				<td>
+<% if p.state == "01" then %>
+					<span class="wt-badge wt-on"><%:已启用%></span>
+<% else %>
+					<span class="wt-badge wt-off"><%:已禁用%></span>
+<% end %>
+				</td>
+				<td>
+<% if p.state == "01" then %>
+					<form method="post" style="display:inline" onsubmit="return confirm('确认禁用该配置文件？模块会重新搜网，当前数据连接会短暂中断。');">
+						<input type="hidden" name="act" value="disable" />
+						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
+						<input class="cbi-button cbi-button-reset" type="submit" value="<%:禁用%>" />
+					</form>
+<% else %>
+					<form method="post" style="display:inline" onsubmit="return confirm('确认启用该配置文件？模块会重新搜网，当前数据连接会中断。');">
+						<input type="hidden" name="act" value="enable" />
+						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
+						<input class="cbi-button cbi-button-apply" type="submit" value="<%:启用%>" />
+					</form>
+<% end %>
+				</td>
+			</tr>
+<% end %>
+		</table>
+<% end %>
+	</div>
+
+	<div class="wt-hint" style="margin-bottom:12px">
+		<%:启用/禁用由本机直接发 APDU 完成，不联网。下载或删除配置文件仍需手机 App 或 PC/SC 读卡器。%>
+	</div>
+
+	<div>
+		<input class="cbi-button" type="button" value="<%:刷新%>" onclick="location.reload()" />
+	</div>
+
 </div>
 
-<div class="cbi-section">
-	<h3><%:操作%></h3>
-	<form method="post" action="">
-		<input type="hidden" name="action" value="enable" />
-		<input type="text" name="iccid" placeholder="ICCID" />
-		<input class="cbi-button cbi-button-apply" type="submit" value="<%:启用%>" />
-	</form>
-	<form method="post" action="">
-		<input type="hidden" name="action" value="disable" />
-		<input type="text" name="iccid" placeholder="ICCID" />
-		<input class="cbi-button" type="submit" value="<%:禁用%>" />
-	</form>
-	<form method="post" action="">
-		<input type="hidden" name="action" value="delete" />
-		<input type="text" name="iccid" placeholder="ICCID" />
-		<input class="cbi-button cbi-button-reset" type="submit" value="<%:删除%>" />
-	</form>
-</div>
-
-<div class="cbi-section">
-	<h3><%:下载新 Profile%></h3>
-	<form method="post" action="">
-		<input type="hidden" name="action" value="download" />
-		<p><input type="text" name="smdp" placeholder="SM-DP+ 地址" style="width:60%" /></p>
-		<p><input type="text" name="code" placeholder="Activation Code" style="width:60%" /></p>
-		<input class="cbi-button cbi-button-apply" type="submit" value="<%:下载%>" />
-	</form>
-	<% if not clock_ok then %>
-	<p class="alert-message warning"><%:设备时间不正确（未联网校时），下载会被 TLS 校验拒绝。请先让 WAN 联通并等待 NTP 同步。%></p>
-	<% end %>
-	<p class="cbi-section-descr"><%:下载前请确认设备时间正确，否则 TLS 校验会失败。%></p>
-</div>
 <%+footer%>
