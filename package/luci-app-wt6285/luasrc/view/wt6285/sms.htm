@@ -1,39 +1,268 @@
 <%
 local sys = require "luci.sys"
 local http = require "luci.http"
-local number = http.formvalue("number")
-local text = http.formvalue("text")
-local del = http.formvalue("delete")
 
-if number and text and #number > 0 then
-	sys.call("/usr/bin/sms_tool -d /dev/ttyUSB1 send " .. number .. " '" .. text:gsub("'", "") .. "' >/dev/null 2>&1")
+local DEV = sys.exec("uci -q get sms_tool.general.atport 2>/dev/null"):gsub("%s+$", "")
+if DEV == "" then DEV = "/dev/ttyUSB1" end
+
+local LOCK = "/var/lock/wt6285-at.lock"
+
+local function sh_single(s)
+	return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
-if del == "all" then
-	sys.call("/usr/bin/sms_tool -d /dev/ttyUSB1 delete all >/dev/null 2>&1")
+local act = http.formvalue("act") or ""
+local msg, ok = nil, false
+
+if act == "send" then
+	local num = (http.formvalue("number") or ""):gsub("[^%d%+%-%*#]", "")
+	local text = http.formvalue("text") or ""
+	if #num >= 5 and #text > 0 then
+		local out = sys.exec(string.format(
+			"flock -x %s /usr/bin/sms_tool -d %s send %s %s 2>&1",
+			LOCK, DEV, sh_single(num), sh_single(text)))
+		ok = not out:find("ERROR") and not out:find("error")
+		msg = ok and "已发送" or ("发送失败：" .. out:gsub("%s+$", ""))
+	else
+		msg = "号码或内容为空"
+	end
+
+elseif act == "delete" then
+	local idx = http.formvalue("index") or ""
+	if idx == "all" then
+		sys.exec(string.format("flock -x %s /usr/bin/sms_tool -d %s delete all >/dev/null 2>&1", LOCK, DEV))
+		ok, msg = true, "已清空全部短信"
+	elseif tonumber(idx) then
+		sys.exec(string.format("flock -x %s /usr/bin/sms_tool -d %s delete %s >/dev/null 2>&1", LOCK, DEV, idx))
+		ok, msg = true, "已删除第 " .. idx .. " 条"
+	end
+
+elseif act == "save" then
+	local function setv(k, v)
+		if v == nil then return end
+		if v == "" then
+			sys.exec("uci -q delete sms_tool.general." .. k)
+		else
+			sys.exec("uci -q set sms_tool.general." .. k .. "=" .. sh_single(v))
+		end
+	end
+	setv("notify_enabled", http.formvalue("notify_enabled") == "1" and "1" or "0")
+	setv("notify_url", http.formvalue("notify_url"))
+	setv("bark_key", http.formvalue("bark_key"))
+	setv("pnumber", http.formvalue("pnumber"))
+	setv("prefix", http.formvalue("prefix"))
+	setv("checktime", http.formvalue("checktime"))
+	setv("storage", http.formvalue("storage"))
+	setv("atport", http.formvalue("atport"))
+	sys.exec("uci -q commit sms_tool")
+	ok, msg = true, "设置已保存"
+
+elseif act == "test" then
+	local url = http.formvalue("notify_url") or ""
+	local bark = http.formvalue("bark_key") or ""
+	local target = url
+	if bark ~= "" then
+		target = "https://api.day.app/" .. bark
+	end
+	if target == "" then
+		msg = "请先填写推送地址或 Bark Key"
+	else
+		local out = sys.exec(string.format(
+			"curl -fsS -m 10 -X POST %s -H 'Content-Type: application/json' -d %s 2>&1",
+			sh_single(target),
+			sh_single('{"title":"WT6285 测试","body":"短信推送连通性测试"}')))
+		ok = (out == "")
+		msg = ok and "测试推送已发出（检查手机）" or ("推送失败：" .. out)
+	end
 end
 
-local list = sys.exec("/usr/bin/sms_tool -d /dev/ttyUSB1 recv -j 2>&1")
+local function uci(k, d)
+	local v = sys.exec("uci -q get sms_tool.general." .. k .. " 2>/dev/null"):gsub("%s+$", "")
+	if v == "" then return d or "" end
+	return v
+end
+
+-- 收件箱
+local msgs = {}
+if act == "" or act == "refresh" then
+	local out = sys.exec(string.format(
+		"flock -x %s /usr/bin/sms_tool -d %s recv -j 2>/dev/null", LOCK, DEV))
+	for line in out:gmatch("[^\n]+") do
+		local idx = line:match('"index"%s*:%s*(%d+)')
+		local num = line:match('"number"%s*:%s*"([^"]*)"')
+		local txt = line:match('"text"%s*:%s*"([^"]*)"')
+		local date = line:match('"date"%s*:%s*"([^"]*)"')
+		local stat = line:match('"stat"%s*:%s*(%d+)')
+		if idx then
+			msgs[#msgs + 1] = {
+				index = idx, number = num or "", text = txt or "",
+				date = date or "", unread = (stat == "0")
+			}
+		end
+	end
+end
 %>
 
 <%+header%>
-<h2 name="content"><%:短信%></h2>
 
-<div class="cbi-section">
-	<h3><%:收件箱%></h3>
-	<pre style="white-space:pre-wrap"><%=list%></pre>
-	<form method="post" action="">
-		<input type="hidden" name="delete" value="all" />
-		<input class="cbi-button cbi-button-reset" type="submit" value="<%:清空全部%>" />
-	</form>
+<style>
+.wt-wrap { max-width: 980px; }
+.wt-sec { border: 1px solid rgba(127,127,127,.28); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+.wt-sec h3 { margin: 0; padding: 11px 16px; font-size: 14px; font-weight: 600; background: rgba(127,127,127,.09); border-bottom: 1px solid rgba(127,127,127,.22); }
+.wt-body { padding: 14px 16px; }
+.wt-row { display: grid; grid-template-columns: 200px 1fr; gap: 10px 14px; align-items: center; font-size: 13px; }
+.wt-row label { opacity: .72; }
+.wt-row input[type=text], .wt-row input[type=number], .wt-row select { width: 100%; padding: 7px 9px; border: 1px solid rgba(127,127,127,.35); border-radius: 6px; background: rgba(127,127,127,.04); color: inherit; box-sizing: border-box; }
+.wt-msg { border: 1px solid rgba(127,127,127,.22); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.wt-msg .hd { display: flex; gap: 10px; align-items: center; font-size: 12px; opacity: .75; margin-bottom: 6px; }
+.wt-msg .tx { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+.wt-badge { padding: 1px 7px; border-radius: 9px; font-size: 11px; }
+.wt-new { background: rgba(46,204,113,.18); color: #1e8449; }
+.wt-banner { border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; }
+.wt-ok { border: 1px solid rgba(46,204,113,.55); background: rgba(46,204,113,.12); }
+.wt-err { border: 1px solid rgba(231,76,60,.55); background: rgba(231,76,60,.12); }
+.wt-hint { font-size: 12px; opacity: .6; }
+.wt-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+</style>
+
+<h2 name="content"><%:移远模块 · 短信%></h2>
+
+<div class="wt-wrap">
+
+<% if msg then %>
+	<div class="wt-banner <%= ok and "wt-ok" or "wt-err" %>"><%=luci.util.pcdata(msg)%></div>
+<% end %>
+
+	<div class="wt-sec">
+		<h3><%:收件箱%>　<span class="wt-hint"><%=#msgs%> 条</span></h3>
+		<div class="wt-body">
+<% if #msgs == 0 then %>
+			<div class="wt-hint"><%:暂无短信%></div>
+<% else %>
+<% for _, m in ipairs(msgs) do %>
+			<div class="wt-msg">
+				<div class="hd">
+					<span><%=luci.util.pcdata(m.number)%></span>
+					<span><%=luci.util.pcdata(m.date)%></span>
+					<% if m.unread then %><span class="wt-badge wt-new"><%:未读%></span><% end %>
+					<span style="margin-left:auto">
+						<form method="post" style="display:inline">
+							<input type="hidden" name="act" value="delete" />
+							<input type="hidden" name="index" value="<%=m.index%>" />
+							<input class="cbi-button cbi-button-reset" type="submit" value="<%:删除%>" style="padding:2px 8px;font-size:11px" />
+						</form>
+					</span>
+				</div>
+				<div class="tx"><%=luci.util.pcdata(m.text)%></div>
+			</div>
+<% end %>
+			<form method="post" style="margin-top:8px">
+				<input type="hidden" name="act" value="delete" />
+				<input type="hidden" name="index" value="all" />
+				<input class="cbi-button cbi-button-reset" type="submit" value="<%:清空全部%>"
+					onclick="return confirm('确认清空全部短信？');" />
+			</form>
+<% end %>
+		</div>
+	</div>
+
+	<div class="wt-sec">
+		<h3><%:发送%></h3>
+		<div class="wt-body">
+			<form method="post">
+				<input type="hidden" name="act" value="send" />
+				<div class="wt-row">
+					<label><%:号码%></label>
+					<input type="text" name="number" value="<%=luci.util.pcdata(uci("pnumber") ~= "" and ("+" .. uci("pnumber")) or "")%>" placeholder="+8613800000000" />
+				</div>
+				<div class="wt-row" style="margin-top:10px">
+					<label><%:内容%></label>
+					<textarea name="text" rows="4" style="width:100%;padding:7px 9px;border:1px solid rgba(127,127,127,.35);border-radius:6px;background:rgba(127,127,127,.04);color:inherit"></textarea>
+				</div>
+				<div class="wt-actions">
+					<input class="cbi-button cbi-button-apply" type="submit" value="<%:发送%>" />
+					<span class="wt-hint"><%:经模块直接发出，按运营商计费%></span>
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<div class="wt-sec">
+		<h3><%:通知推送%></h3>
+		<div class="wt-body">
+			<form method="post">
+				<input type="hidden" name="act" value="save" />
+				<div class="wt-row">
+					<label><%:启用推送%></label>
+					<select name="notify_enabled">
+						<option value="0" <%= uci("notify_enabled") ~= "1" and "selected" or "" %>><%:关闭%></option>
+						<option value="1" <%= uci("notify_enabled") == "1" and "selected" or "" %>><%:开启%></option>
+					</select>
+				</div>
+				<div class="wt-row">
+					<label><%:Bark Key%></label>
+					<input type="text" name="bark_key" value="<%=luci.util.pcdata(uci("bark_key"))%>" placeholder="点此填写 Bark 设备 Key" />
+				</div>
+				<div class="wt-row">
+					<label><%:自定义推送地址%></label>
+					<input type="text" name="notify_url" value="<%=luci.util.pcdata(uci("notify_url"))%>" placeholder="https://api.day.app/<key>（留空则用 Bark Key）" />
+				</div>
+				<div class="wt-actions">
+					<input class="cbi-button cbi-button-apply" type="submit" value="<%:保存设置%>" />
+				</div>
+			</form>
+			<form method="post" style="margin-top:10px">
+				<input type="hidden" name="act" value="test" />
+				<input type="hidden" name="notify_url" value="<%=luci.util.pcdata(uci("notify_url"))%>" />
+				<input type="hidden" name="bark_key" value="<%=luci.util.pcdata(uci("bark_key"))%>" />
+				<input class="cbi-button" type="submit" value="<%:测试推送%>" />
+			</form>
+		</div>
+	</div>
+
+	<div class="wt-sec">
+		<h3><%:高级设置%></h3>
+		<div class="wt-body">
+			<form method="post">
+				<input type="hidden" name="act" value="save" />
+				<input type="hidden" name="notify_enabled" value="<%=uci("notify_enabled")%>" />
+				<input type="hidden" name="notify_url" value="<%=luci.util.pcdata(uci("notify_url"))%>" />
+				<input type="hidden" name="bark_key" value="<%=luci.util.pcdata(uci("bark_key"))%>" />
+				<div class="wt-row">
+					<label><%:默认国家码%></label>
+					<input type="text" name="pnumber" value="<%=luci.util.pcdata(uci("pnumber"))%>" placeholder="86" />
+				</div>
+				<div class="wt-row">
+					<label><%:号码前缀%></label>
+					<input type="text" name="prefix" value="<%=luci.util.pcdata(uci("prefix"))%>" placeholder="1" />
+				</div>
+				<div class="wt-row">
+					<label><%:轮询间隔（秒）%></label>
+					<input type="text" name="checktime" value="<%=luci.util.pcdata(uci("checktime"))%>" placeholder="10" />
+				</div>
+				<div class="wt-row">
+					<label><%:存储位置%></label>
+					<select name="storage">
+						<option value="SM" <%= uci("storage","SM") == "SM" and "selected" or "" %>><%:SIM 卡%></option>
+						<option value="ME" <%= uci("storage") == "ME" and "selected" or "" %>><%:模块内存%></option>
+					</select>
+				</div>
+				<div class="wt-row">
+					<label><%:AT 设备%></label>
+					<input type="text" name="atport" value="<%=luci.util.pcdata(uci("atport", "/dev/ttyUSB1"))%>" />
+				</div>
+				<div class="wt-actions">
+					<input class="cbi-button cbi-button-apply" type="submit" value="<%:保存设置%>" />
+					<span class="wt-hint"><%:轮询由 /usr/libexec/wt6285/smsd.sh 每分钟执行一次%></span>
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<div class="wt-actions">
+		<input class="cbi-button" type="button" value="<%:刷新%>" onclick="location.reload()" />
+	</div>
+
 </div>
 
-<div class="cbi-section">
-	<h3><%:发送%></h3>
-	<form method="post" action="">
-		<p><input type="text" name="number" placeholder="+8613800000000" style="width:40%" /></p>
-		<p><textarea name="text" rows="4" style="width:80%"></textarea></p>
-		<input class="cbi-button cbi-button-apply" type="submit" value="<%:发送%>" />
-	</form>
-</div>
 <%+footer%>
