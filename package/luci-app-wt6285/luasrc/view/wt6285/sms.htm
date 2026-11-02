@@ -49,6 +49,9 @@ elseif act == "save" then
 	setv("notify_enabled", http.formvalue("notify_enabled") == "1" and "1" or "0")
 	setv("notify_url", http.formvalue("notify_url"))
 	setv("bark_key", http.formvalue("bark_key"))
+	setv("bark_group", http.formvalue("bark_group"))
+	setv("bark_encrypt", http.formvalue("bark_encrypt") == "1" and "1" or "0")
+	setv("bark_crypt_key", http.formvalue("bark_crypt_key"))
 	setv("pnumber", http.formvalue("pnumber"))
 	setv("prefix", http.formvalue("prefix"))
 	setv("checktime", http.formvalue("checktime"))
@@ -204,6 +207,21 @@ end
 					<input type="text" name="bark_key" value="<%=luci.util.pcdata(uci("bark_key"))%>" placeholder="点此填写 Bark 设备 Key" />
 				</div>
 				<div class="wt-row">
+					<label><%:通知分组%></label>
+					<input type="text" name="bark_group" value="<%=luci.util.pcdata(uci("bark_group"))%>" placeholder="例如 短信（iOS 通知分组名）" />
+				</div>
+				<div class="wt-row">
+					<label><%:加密推送%></label>
+					<select name="bark_encrypt">
+						<option value="0" <%= uci("bark_encrypt") ~= "1" and "selected" or "" %>><%:关闭%></option>
+						<option value="1" <%= uci("bark_encrypt") == "1" and "selected" or "" %>><%:开启（AES-128-CBC）%></option>
+					</select>
+				</div>
+				<div class="wt-row">
+					<label><%:加密密钥%></label>
+					<input type="text" name="bark_crypt_key" value="<%=luci.util.pcdata(uci("bark_crypt_key"))%>" placeholder="16 位，与 App 里设置的一致" maxlength="16" />
+				</div>
+				<div class="wt-row">
 					<label><%:自定义推送地址%></label>
 					<input type="text" name="notify_url" value="<%=luci.util.pcdata(uci("notify_url"))%>" placeholder="https://api.day.app/<key>（留空则用 Bark Key）" />
 				</div>
@@ -228,6 +246,9 @@ end
 				<input type="hidden" name="notify_enabled" value="<%=uci("notify_enabled")%>" />
 				<input type="hidden" name="notify_url" value="<%=luci.util.pcdata(uci("notify_url"))%>" />
 				<input type="hidden" name="bark_key" value="<%=luci.util.pcdata(uci("bark_key"))%>" />
+				<input type="hidden" name="bark_group" value="<%=luci.util.pcdata(uci("bark_group"))%>" />
+				<input type="hidden" name="bark_encrypt" value="<%=uci("bark_encrypt")%>" />
+				<input type="hidden" name="bark_crypt_key" value="<%=luci.util.pcdata(uci("bark_crypt_key"))%>" />
 				<div class="wt-row">
 					<label><%:默认国家码%></label>
 					<input type="text" name="pnumber" value="<%=luci.util.pcdata(uci("pnumber"))%>" placeholder="86" />
