@@ -116,13 +116,21 @@ jobs:
           if [ -n "${{ matrix.extra }}" ]; then echo "${{ matrix.extra }}" >> .config; fi
           make defconfig
           echo "--- package assertions ---"
-          for sym in CONFIG_PACKAGE_lpac=y CONFIG_PACKAGE_quectel-cm-5g=y CONFIG_PACKAGE_luci-app-wt6285=y CONFIG_PACKAGE_sms-tool=y; do
+          for sym in CONFIG_PACKAGE_quectel-cm-5g=y CONFIG_PACKAGE_luci-app-wt6285=y CONFIG_PACKAGE_sms-tool=y CONFIG_PACKAGE_luci-theme-vantage=y CONFIG_PACKAGE_luci-app-vantage=y; do
             if grep -q "^$sym$" .config; then
               echo "OK $sym"
             else
               echo "::error::missing $sym"
               exit 1
             fi
+          done
+          echo "--- negative assertions ---"
+          for sym in CONFIG_PACKAGE_lpac CONFIG_PACKAGE_luci-app-ssr-plus; do
+            if grep -q "^$sym=y$" .config; then
+              echo "::error::unexpected $sym selected"
+              exit 1
+            fi
+            echo "OK excluded $sym"
           done
 
       - name: Build firmware
