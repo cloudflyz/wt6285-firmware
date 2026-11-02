@@ -86,6 +86,15 @@ jobs:
           restore-keys: |
             ${{ format('{0}-{1}-', 'wt6285', 'toolchain') }}
 
+      # build_dir 里的 gcc 编译目录单独缓存：
+      # 只恢复 staging_dir 时 OpenWrt 仍会重编工具链，必须连 build_dir 一起
+      - name: Cache toolchain build dir
+        id: tcb
+        uses: actions/cache@v4
+        with:
+          path: lede/build_dir/toolchain-*
+          key: ${{ format('{0}-{1}-{2}', 'wt6285', 'toolchain-build', matrix.kver) }}-${{ hashFiles('upstream.lock') }}
+
       - name: Report toolchain cache
         run: |
           if [ "${{ steps.tc.outputs.cache-hit }}" = "true" ]; then
