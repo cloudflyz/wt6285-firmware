@@ -6,7 +6,7 @@ NRadio WT6285（鲲鹏cc）自用固件，基于 [coolsnowwolf/lede](https://git
 
 ## 特性
 
-- **双内核**：5.10（稳定，默认）/ 6.18（experimental，ramips testing 通道）
+- **内核**：5.10.273（长期维护版，ramips 默认）
 - **eSIM 本机管理**：`esim.lua` 直接发裸 APDU，读 EID、列 profile、启用/禁用（不依赖 lpac、不联网）
 - **短信收发**：`sms-tool` + 通知脚本
 - **4G 拨号**：`quectel-cm-5G`，兼容 EC200A 系模块
@@ -45,11 +45,8 @@ TLS 栈：`wpad-basic-openssl` + `libopenssl` + `openssl-util` + `wget-ssl` + `L
 
 | 配置 | 内核 | 用途 |
 | --- | --- | --- |
-| `configs/wt6285-lite.config` | 5.10.273 | 稳定版，默认 |
-| `configs/wt6285-6.18.config` | 6.18.60 | experimental，ramips `KERNEL_TESTING_PATCHVER` |
+| `configs/wt6285-lite.config` | 5.10.273 | 精简版，默认 |
 | `configs/wt6285.config` | 5.10.273 | 完整版（含 usb-modeswitch 等） |
-
-6.18 配置文件里显式写了 `CONFIG_TESTING_KERNEL=y`——**这一行不能省**，否则 `make defconfig` 会静默回落到 5.10。
 
 ## 首次启动默认值
 
@@ -78,20 +75,20 @@ root 登录   root / password（lean default-settings 的初始密码，刷完�
 
 ### GitHub Actions
 
-`.github/workflows/build.yml`，`workflow_dispatch` 手动触发，matrix 并行构建 5.10 与 6.18。
+`.github/workflows/build.yml`，`workflow_dispatch` 手动触发，matrix 构建 5.10。
 
 - 按 `upstream.lock` 固定 lean commit
 - `feeds update -a` / `install -a` → 拷入自定义包 → 应用 `files/` overlay
 - `make defconfig` 后断言 4 个自定义包符号，缺一个即失败
 - 编译完成后按 `wt6285-<kver>-<sha>-*` 重命名，生成 `SHA256SUMS.txt` 与 `buildinfo.txt`
 
-实测单轮：5.10 约 72 分钟，6.18 约 76 分钟（上限 300 分钟）。
+实测单轮：约 72 分钟（上限 300 分钟）。
 
 ### 本地
 
 ```sh
 # 准备：lede 源码已就位
-cp configs/wt6285-6.18.config lede/.config
+cp configs/wt6285-lite.config lede/.config
 make -C lede defconfig
 
 # 编译 + 自动归档
@@ -108,8 +105,7 @@ JOBS=8 scripts/build-local.sh
 
 | 文件 | 大小 | SHA256 |
 | --- | --- | --- |
-| `wt6285-6.18-1e71a21-...-squashfs-sysupgrade.bin` | 12,321,570 B | `54d5f134…5a56f983` |
-| `wt6285-5.10-1e71a21-...-squashfs-sysupgrade.bin` | 10,748,706 B | `a1b617bf…e06d35` |
+| `wt6285-5.10-1e71a21-...-squashfs-sysupgrade.bin` | 10,486,562 B | `e0bc092f…e4d8d7` |
 
 发布于 [Releases](https://github.com/cloudflyz/wt6285-firmware/releases)，附 `SHA256SUMS.txt` 与 `buildinfo.txt`（lean SHA / 内核 / 构建时间 / runner）。
 
@@ -122,18 +118,16 @@ sha256sum -c SHA256SUMS.txt
 ## 刷机
 
 ```sh
-sysupgrade -n /tmp/wt6285-6.18-1e71a21-...-squashfs-sysupgrade.bin
+sysupgrade -n /tmp/wt6285-5.10-1e71a21-...-squashfs-sysupgrade.bin
 ```
 
 - 刷前完成 `docs/backup.md` 的备份
 - **刷完立即设置 root 密码**：OpenWrt 默认 root 无密码，LAN 内可直接登录
-- 6.18 出问题直接回刷 5.10 版
 
 ## 已知限制
 
-- **6.18 是 experimental**：走 ramips testing 通道，上游可能变更。`upstream.lock` 固定 SHA 保证可复现，但升级 lean 时需重新验证补丁是否仍可应用。
 - **镜像不是字节级可复现**：本地与 CI 编译路径不同（`/root/...` vs `/home/runner/...`），路径字符串进入内核导致哈希不同，功能等价。需要字节一致得统一构建目录并设 `SOURCE_DATE_EPOCH`。
-- **体积余量有限**：6.18 镜像 11.75 MiB / 分区 15.44 MiB，剩约 3.69 MiB。加包前先算余量。
+- **体积余量有限**：5.10 镜像 10.49 MiB / 分区 15.44 MiB，剩约 4.9 MiB。加包前先算余量。
 - **eSIM 只能做本地操作**：EC200A 不支持 `AT+CCHO`/`AT+CCHC`/`AT+CGLA`，本机只能走单条 `AT+CSIM`，因此**启用/禁用/列 profile 可以，下载与删除不行**（需要完整 ES10 会话）。下载请用手机 App 或 PC/SC 读卡器。
 - **`AT+CGATT=0` 会让 EC200A 失联**：实测该指令会把 AT 通道弄哑、4G 掉线，需硬复位恢复。因此漫游流量熔断不能用它，只能走 netifd 层（`ifdown wan` + APN DONTUSE + nft）。
 - **切换 profile 会短暂断网**：启用/禁用后模块需 USB 重枚举才能重新附着，约 30 秒，期间 4G 中断、IP 可能变化（LAN/LuCI 不受影响）。
@@ -147,16 +141,13 @@ sysupgrade -n /tmp/wt6285-6.18-1e71a21-...-squashfs-sysupgrade.bin
 | `lpac` 报 `build dependency on 'libcurl', which does not exist` | `PKG_BUILD_DEPENDS` 由 `libcurl` 改为源包名 `curl` |
 | 下载缓存在 `lede/dl`，被 `dirclean` 清空 | 外置 `DL_DIR`，528 MB 缓存长期复用 |
 | CI 缓存 key 含 `configs/**`，改配置即重下 1 GB | 只按 `upstream.lock` 计算 |
-| 5.10 与 6.18 产物同名互相覆盖 | 本地与 CI 均按 `wt6285-<kver>-<sha>-*` 命名 |
-| 6.18 配置缺 `CONFIG_TESTING_KERNEL=y`，实际编出 5.10 | 写入配置并断言 |
 | 首版混入 Lean 默认选中的非预期包 | 只写 `CONFIG_DEFAULT_... is not set` 只能关掉默认选中，须写 `CONFIG_PACKAGE_... is not set` 才真正排除 |
 | TLS 栈混用 mbedtls / openssl | 三份配置统一到 OpenSSL |
-| CI matrix 无 6.18 任务 | 增加 `kver: "6.18"` 条目 |
 
 ## 目录
 
 ```
-configs/       defconfig（5.10 / 6.18 / 完整版）
+configs/       defconfig（lite / 完整版）
 files/         rootfs overlay（uci-defaults、脚本、init.d、hotplug）
 package/       自维护包：lpac、quectel-cm-5g、luci-app-wt6285
 scripts/       本地构建入口 build-local.sh
@@ -167,7 +158,7 @@ upstream.lock  pinned lean commit
 ## 状态
 
 - [x] P0 设备备份与脚本归档
-- [x] P1 CI 构建（5.10 + 6.18 双 job 通过）
+- [x] P1 CI 构建（5.10 job 通过）
 - [x] P2 集成 lpac + sms-tool + quectel-cm-5G
 - [x] P3 LuCI 页面（状态 / SIM / eSIM / 短信 / 设置）
 - [x] P4 本地双内核编译通过，产物归档
