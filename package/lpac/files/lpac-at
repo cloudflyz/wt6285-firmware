@@ -11,7 +11,9 @@
 # 因此这里优先用 uci 配置，未配置则自动探测。
 
 AT_DEV="$(uci -q get lpac.main.at_device)"
-if [ -z "$AT_DEV" ]; then
+# uci 里配的路径可能属于另一种 USB 组成（MBIM 下是 ttyACM1，RNDIS 下是 ttyUSB1），
+# 不存在就重新探测，避免 "Failed to open device"。
+if [ ! -c "$AT_DEV" ]; then
 	if [ -c /dev/ttyACM1 ]; then
 		AT_DEV=/dev/ttyACM1
 	elif [ -c /dev/ttyUSB1 ]; then
