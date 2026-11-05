@@ -39,7 +39,7 @@ jobs:
       matrix:
         include:
           - kver: "5.10"
-            cfg: ${{ inputs.cfg || 'configs/wt6285-lite.config' }}
+            cfg: ${{ inputs.cfg || 'configs/wt6285.config' }}
             extra: ""
     steps:
       - uses: actions/checkout@v4
