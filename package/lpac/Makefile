@@ -20,7 +20,7 @@ define Package/lpac
   CATEGORY:=Utilities
   TITLE:=eUICC eSIM Local Profile Assistant (AT+QMI backend)
   URL:=https://github.com/estkme-group/lpac
-  DEPENDS:=+libcurl +ca-bundle +libpthread +libqmi
+  DEPENDS:=+libcurl +ca-bundle +libpthread
 endef
 
 define Package/lpac/description
@@ -32,7 +32,7 @@ TARGET_CFLAGS += $(FPIC)
 CMAKE_OPTIONS += \
 	-DLPAC_WITH_APDU_AT=ON \
 	-DLPAC_WITH_APDU_PCSC=OFF \
-	-DLPAC_WITH_APDU_QMI=ON \
+	-DLPAC_WITH_APDU_QMI=OFF \
 	-DLPAC_WITH_APDU_QMI_QRTR=OFF \
 	-DLPAC_WITH_APDU_MBIM=OFF \
 	-DLPAC_WITH_HTTP_CURL=ON
