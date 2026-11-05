@@ -1,0 +1,8 @@
+#!/bin/sh
+# 内置管理公钥（非 root 可读目录不可写；dropbear 要求 600）
+mkdir -p /etc/dropbear
+chmod 700 /etc/dropbear
+if [ -f /etc/dropbear/authorized_keys ]; then
+  chmod 600 /etc/dropbear/authorized_keys
+fi
+exit 0
