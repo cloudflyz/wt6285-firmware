@@ -6,7 +6,7 @@ on:
       cfg:
         description: "Config file"
         type: choice
-        options: [configs/wt6285-lite.config, configs/wt6285.config]
+        options: [configs/wt6285-lite.config, configs/wt6285.config, configs/wt6285-qmi.config]
         default: configs/wt6285-lite.config
       slim_i18n:
         description: "精简 luci-i18n 翻译包（体积优化）"

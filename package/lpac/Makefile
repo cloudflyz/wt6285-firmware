@@ -18,21 +18,21 @@ include $(INCLUDE_DIR)/cmake.mk
 define Package/lpac
   SECTION:=utils
   CATEGORY:=Utilities
-  TITLE:=eUICC eSIM Local Profile Assistant (AT backend)
+  TITLE:=eUICC eSIM Local Profile Assistant (AT+QMI backend)
   URL:=https://github.com/estkme-group/lpac
-  DEPENDS:=+libcurl +ca-bundle +libpthread
+  DEPENDS:=+libcurl +ca-bundle +libpthread +libqmi
 endef
 
 define Package/lpac/description
  lpac is a cross-platform local profile agent implementing SGP.22.
- Built with the AT APDU backend only, for Quectel EC200A class modems.
+ Built with AT and QMI APDU backends; QMI is used to bypass AT+CCHO on EC200A.
 endef
 
 TARGET_CFLAGS += $(FPIC)
 CMAKE_OPTIONS += \
 	-DLPAC_WITH_APDU_AT=ON \
 	-DLPAC_WITH_APDU_PCSC=OFF \
-	-DLPAC_WITH_APDU_QMI=OFF \
+	-DLPAC_WITH_APDU_QMI=ON \
 	-DLPAC_WITH_APDU_QMI_QRTR=OFF \
 	-DLPAC_WITH_APDU_MBIM=OFF \
 	-DLPAC_WITH_HTTP_CURL=ON
