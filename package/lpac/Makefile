@@ -40,6 +40,7 @@ CMAKE_OPTIONS += \
 define Package/lpac/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/lpac $(1)/usr/bin/lpac
+	$(INSTALL_BIN) ./files/lpac-at $(1)/usr/bin/lpac-at
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) ./files/lpac.config $(1)/etc/config/lpac
 endef

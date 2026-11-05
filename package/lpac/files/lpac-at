@@ -1,0 +1,37 @@
+#!/bin/sh
+# lpac-at —— 让出串口后再跑 lpac
+#
+# EC200A 的 AT 口同一时刻只能被一个进程占用：wt6285 服务会用 sms_tool
+# 抓 AT 口做 CGDCONT/QNETDEVCTL，此时 lpac 会阻塞或报 euicc_init。
+# 本包装先停服务、跑完 lpac、再把服务拉起来。
+#
+# AT 口随模组 USB 组成变化：
+#   MBIM/ECM + ACM 组成 → /dev/ttyACM1
+#   RNDIS + option 组成 → /dev/ttyUSB1
+# 因此这里优先用 uci 配置，未配置则自动探测。
+
+AT_DEV="$(uci -q get lpac.main.at_device)"
+if [ -z "$AT_DEV" ]; then
+	if [ -c /dev/ttyACM1 ]; then
+		AT_DEV=/dev/ttyACM1
+	elif [ -c /dev/ttyUSB1 ]; then
+		AT_DEV=/dev/ttyUSB1
+	else
+		AT_DEV=/dev/ttyACM1
+	fi
+fi
+
+SVC=/etc/init.d/wt6285
+[ -x "$SVC" ] && "$SVC" stop >/dev/null 2>&1
+sleep 1
+
+LPAC_APDU=at
+LPAC_APDU_AT_DEVICE="$AT_DEV"
+LPAC_APDU_AT_BAUD=115200
+export LPAC_APDU LPAC_APDU_AT_DEVICE LPAC_APDU_AT_BAUD
+
+/usr/bin/lpac "$@"
+rc=$?
+
+[ -x "$SVC" ] && "$SVC" start >/dev/null 2>&1
+exit $rc
