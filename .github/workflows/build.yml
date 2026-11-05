@@ -6,7 +6,7 @@ on:
       cfg:
         description: "Config file"
         type: choice
-        options: [configs/wt6285-lite.config, configs/wt6285.config, configs/wt6285-qmi.config]
+        options: [configs/wt6285-lite.config, configs/wt6285.config, configs/wt6285-qmi.config, configs/wt6285-uqmi.config]
         default: configs/wt6285-lite.config
       slim_i18n:
         description: "精简 luci-i18n 翻译包（体积优化）"
@@ -169,7 +169,7 @@ jobs:
           if [ -n "${{ matrix.extra }}" ]; then echo "${{ matrix.extra }}" >> .config; fi
           make defconfig
           echo "--- package assertions ---"
-          for sym in CONFIG_PACKAGE_quectel-cm-5g=y CONFIG_PACKAGE_luci-app-wt6285=y CONFIG_PACKAGE_sms-tool=y CONFIG_PACKAGE_luci-theme-vantage=y CONFIG_PACKAGE_luci-app-vantage=y; do
+          for sym in CONFIG_PACKAGE_quectel-cm-5g=y CONFIG_PACKAGE_luci-app-wt6285=y CONFIG_PACKAGE_sms-tool=y CONFIG_PACKAGE_luci-theme-vantage=y CONFIG_PACKAGE_luci-app-vantage=y CONFIG_PACKAGE_lpac=y CONFIG_PACKAGE_kmod-usb-acm=y; do
             if grep -q "^$sym$" .config; then
               echo "OK $sym"
             else
@@ -178,7 +178,7 @@ jobs:
             fi
           done
           echo "--- negative assertions ---"
-          for sym in CONFIG_PACKAGE_lpac CONFIG_PACKAGE_luci-app-ssr-plus; do
+          for sym in CONFIG_PACKAGE_luci-app-ssr-plus; do
             if grep -q "^$sym=y$" .config; then
               echo "::error::unexpected $sym selected"
               exit 1
