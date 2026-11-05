@@ -38,8 +38,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # tag 构建默认出 eSIM 版；日常配置无更新时不必重出，需要时手跑 dispatch 选它
           - kver: "5.10"
-            cfg: ${{ inputs.cfg || 'configs/wt6285.config' }}
+            cfg: ${{ inputs.cfg || 'configs/wt6285-esim.config' }}
             extra: ""
     steps:
       - uses: actions/checkout@v4
@@ -169,7 +170,9 @@ jobs:
           if [ -n "${{ matrix.extra }}" ]; then echo "${{ matrix.extra }}" >> .config; fi
           make defconfig
           echo "--- package assertions ---"
-          for sym in CONFIG_PACKAGE_quectel-cm-5g=y CONFIG_PACKAGE_luci-app-wt6285=y CONFIG_PACKAGE_sms-tool=y CONFIG_PACKAGE_luci-theme-vantage=y CONFIG_PACKAGE_luci-app-vantage=y CONFIG_PACKAGE_lpac=y CONFIG_PACKAGE_kmod-usb-acm=y; do
+          REQUIRED="CONFIG_PACKAGE_quectel-cm-5g=y CONFIG_PACKAGE_luci-app-wt6285=y CONFIG_PACKAGE_sms-tool=y CONFIG_PACKAGE_luci-theme-vantage=y CONFIG_PACKAGE_luci-app-vantage=y CONFIG_PACKAGE_kmod-usb-acm=y"
+          case "${{ matrix.cfg }}" in *esim*) REQUIRED="$REQUIRED CONFIG_PACKAGE_lpac=y" ;; esac
+          for sym in $REQUIRED; do
             if grep -q "^$sym$" .config; then
               echo "OK $sym"
             else
@@ -178,7 +181,9 @@ jobs:
             fi
           done
           echo "--- negative assertions ---"
-          for sym in CONFIG_PACKAGE_luci-app-ssr-plus; do
+          NEG="CONFIG_PACKAGE_luci-app-ssr-plus"
+          case "${{ matrix.cfg }}" in *esim*) ;; *) NEG="$NEG CONFIG_PACKAGE_lpac" ;; esac
+          for sym in $NEG; do
             if grep -q "^$sym=y$" .config; then
               echo "::error::unexpected $sym selected"
               exit 1
@@ -213,11 +218,13 @@ jobs:
           find bin/targets/ramips/mt76x8 -maxdepth 1 \( -name '*sysupgrade.bin' -o -name '*initramfs-kernel.bin' \) -exec cp {} ../out/ \;
           cd ../out
           for f in *.bin; do
-            mv "$f" "wt6285-${{ matrix.kver }}-${LEAN_SHA:0:7}-${f}"
+            VARIANT=$(basename "${{ matrix.cfg }}" .config); VARIANT=${VARIANT#wt6285}; VARIANT=${VARIANT#-}; [ -n "$VARIANT" ] || VARIANT=daily
+            mv "$f" "wt6285-${VARIANT}-${{ matrix.kver }}-${LEAN_SHA:0:7}-${f}"
           done
           {
             echo "lean_sha=${LEAN_SHA}"
             echo "kernel=${{ matrix.kver }}"
+            echo "cfg=${{ matrix.cfg }}"
             echo "built_at=$(date -u +%FT%TZ)"
             echo "runner=${ImageOS}"
           } > buildinfo-${{ matrix.kver }}.txt
