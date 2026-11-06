@@ -87,9 +87,18 @@ local function lpac_profiles()
 		end
 		local iccid = field("iccid")
 		if iccid then
+			-- luci 模板按 01/00 判断启用状态（ASN.1 ProfileState 口径），
+			-- 而 lpac 返回的是 enabled/disabled 字符串，这里统一转换，
+			-- 否则页面一律显示"已禁用"。
+			local st = field("profileState") or ""
+			if st == "enabled" then
+				st = "01"
+			elseif st == "disabled" then
+				st = "00"
+			end
 			list[#list + 1] = {
 				iccid = iccid,
-				state = field("profileState") or "",
+				state = st,
 				name  = field("profileNickname") or field("profileName") or "",
 				spn   = field("serviceProviderName") or "",
 				aid   = field("isdpAid") or "",
