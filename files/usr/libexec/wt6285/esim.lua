@@ -19,6 +19,39 @@ local function run(cmd)
 	return out
 end
 
+-- ---------------------------------------------------------------- 结果缓存
+--
+-- lpac 一次完整读取约 13 秒（停服务 + 清通道 + APDU），页面要 info+list 两次，
+-- 叠加 smsd 每分钟抢同一把锁，很容易超过 uhttpd 的 script_timeout(60)，
+-- 浏览器表现就是"页面打不开"。这里做 15 分钟缓存：
+--   命中 → 立即返回；过期 → 先返回旧结果，再后台刷新。
+
+local CACHE_TTL = 900
+
+local function cache_path(action)
+	return "/tmp/wt6285-esim-" .. action .. ".out"
+end
+
+local function read_file(p)
+	local f = io.open(p, "r")
+	if not f then return nil end
+	local c = f:read("*a")
+	f:close()
+	return c
+end
+
+local function write_file(p, c)
+	local f = io.open(p, "w")
+	if f then f:write(c) f:close() end
+end
+
+local function cache_age(p)
+	local t = tonumber(run("stat -c %Y " .. p .. " 2>/dev/null") or "")
+	local now = tonumber(run("date +%s") or "")
+	if not t or not now then return nil end
+	return now - t
+end
+
 local function have_lpac()
 	return run("test -x " .. LPAC_AT .. " && echo yes"):match("yes") ~= nil
 end
@@ -130,6 +163,25 @@ end
 -- ---------------------------------------------------------------- 主流程
 
 local action = arg[1] or "info"
+local FORCE = (arg[2] == "--refresh")
+
+-- 命中缓存直接返回；过期则先回旧值、再后台刷新（页面永不干等 lpac）
+local function serve_cache(act)
+	local cp = cache_path(act)
+	local age = cache_age(cp)
+	local data = read_file(cp)
+	if not data or #data == 0 then return false end
+	if FORCE then return false end
+	io.write(data)
+	if age and age >= CACHE_TTL then
+		run("setsid sh -c '/usr/libexec/wt6285/esim.lua " .. act .. " --refresh >/dev/null 2>&1' >/dev/null 2>&1 &")
+	end
+	return true
+end
+
+if (action == "info" or action == "list") and serve_cache(action) then
+	os.exit(0)
+end
 
 if action == "info" then
 	local eid, err
@@ -142,7 +194,9 @@ if action == "info" then
 		print("error=" .. tostring(err))
 		os.exit(1)
 	end
-	print("eid=" .. eid)
+	local out = "eid=" .. eid
+	print(out)
+	write_file(cache_path("info"), out)
 
 elseif action == "list" then
 	local list, err
@@ -155,10 +209,13 @@ elseif action == "list" then
 		print("error=" .. tostring(err))
 		os.exit(1)
 	end
-	print("count=" .. #list)
+	local buf = {"count=" .. #list}
 	for _, p in ipairs(list) do
-		print(string.format("p=%s|%s|%s|%s", p.iccid, p.state, p.name, p.aid))
+		buf[#buf + 1] = string.format("p=%s|%s|%s|%s", p.iccid, p.state, p.name, p.aid)
 	end
+	local out = table.concat(buf, "\n") .. "\n"
+	print(out)
+	write_file(cache_path("list"), out)
 
 elseif action == "enable" or action == "disable" then
 	local iccid = (arg[2] or ""):gsub("[^0-9A-Fa-f]", "")
