@@ -1,0 +1,60 @@
+<%
+local sys = require "luci.sys"
+
+-- 读取一眼可见的状态，避免进工具页还要再点一次
+local atdev = (sys.exec("uci -q get lpac.main.at_device") or ""):gsub("%s+$", "")
+local atdev_ok = (atdev ~= "" and sys.call("test -c " .. atdev) == 0)
+local ports = (sys.exec("ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null | tr '\\n' ' '") or ""):gsub("%s+$", "")
+
+local cards = {
+	{ href = "tools/sim",      title = "SIM 选择",  desc = "选择插槽 / 卡槽优先级" },
+	{ href = "tools/sms",      title = "短信",      desc = "收发短信、Bark 推送设置" },
+	{ href = "tools/at",       title = "AT 指令",   desc = "逐条执行 AT，含 eSIM/APDU 预设" },
+	{ href = "tools/settings", title = "设置",      desc = "模块与面板参数" },
+}
+%>
+
+<%+header%>
+
+<style>
+.wt-hub-wrap { max-width: 980px; }
+.wt-hub-card { display: block; border: 1px solid rgba(127,127,127,.28); border-radius: 10px;
+	padding: 14px 16px; margin-bottom: 12px; text-decoration: none; color: inherit;
+	background: rgba(127,127,127,.05); transition: background .15s; }
+.wt-hub-card:hover { background: rgba(127,127,127,.13); }
+.wt-hub-card .t { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.wt-hub-card .d { font-size: 12.5px; opacity: .65; }
+.wt-hub-sec { border: 1px solid rgba(127,127,127,.28); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; background: rgba(127,127,127,.06); }
+.wt-hub-sec .lbl { font-size: 12px; opacity: .62; letter-spacing: .04em; text-transform: uppercase; }
+.wt-hub-sec .val { font-size: 14px; margin-top: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+</style>
+
+<h2 name="content"><%:WT6285 · 工具%></h2>
+
+<div class="wt-hub-wrap">
+
+	<div class="wt-hub-sec">
+		<div class="lbl"><%:当前 AT 口%></div>
+		<div class="val">
+			<%=luci.util.pcdata(atdev ~= "" and atdev or "(未配置)")%>
+<% if atdev_ok then %>
+				<span style="color:#1e8449">● 存在</span>
+<% else %>
+				<span style="color:#c0392b">● 不可用</span>
+<% end %>
+		</div>
+		<div class="d" style="font-size:12px;opacity:.6;margin-top:6px">
+			<%:检测到的串口%>：<%=luci.util.pcdata(ports ~= "" and ports or "无")%>
+		</div>
+	</div>
+
+<% for _, c in ipairs(cards) do %>
+	<a class="wt-hub-card" href="<%=luci.dispatcher.build_url("admin/modem/wt6285/" .. c.href)%>">
+		<div class="t"><%=luci.util.pcdata(c.title)%></div>
+		<div class="d"><%=luci.util.pcdata(c.desc)%></div>
+	</a>
+<% end %>
+
+</div>
+
+<%+footer%>

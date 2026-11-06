@@ -92,7 +92,9 @@ function index()
 	entry({"admin", "modem", "wt6285", "esim"}, call("action_esim"), _("eSIM"), 20)
 
 	-- 其余收进「工具」，作为标签页
-	entry({"admin", "modem", "wt6285", "tools"}, firstchild(), _("工具"), 30)
+	-- 用入口页而不是 firstchild 标签栏：LuCI 对 template/call/cbi 子节点
+	-- 的标签渲染不稳定，实测只显示第一个子页，所以改成卡片入口
+	entry({"admin", "modem", "wt6285", "tools"}, template("wt6285/tools"), _("工具"), 30)
 	entry({"admin", "modem", "wt6285", "tools", "sim"}, cbi("wt6285/sim"), _("SIM 选择"), 10).leaf = true
 	entry({"admin", "modem", "wt6285", "tools", "sms"}, template("wt6285/sms"), _("短信"), 20).leaf = true
 	entry({"admin", "modem", "wt6285", "tools", "at"}, call("action_at"), _("AT 指令"), 30).leaf = true
