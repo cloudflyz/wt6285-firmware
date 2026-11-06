@@ -40,6 +40,13 @@ fi
 [ -n "$PICK" ] && AT_DEV="$PICK"
 
 SVC=/etc/init.d/wt6285
+
+# 兜底：lpac 卡死或被信号打断时，服务不能一直停着（那等于断网）
+restore_svc() {
+	[ -x "$SVC" ] && "$SVC" start >/dev/null 2>&1
+}
+trap restore_svc EXIT INT TERM HUP
+
 [ -x "$SVC" ] && "$SVC" stop >/dev/null 2>&1
 sleep 2
 
@@ -58,7 +65,8 @@ LPAC_APDU_AT_DEVICE="$AT_DEV"
 LPAC_APDU_AT_BAUD=115200
 export LPAC_APDU LPAC_APDU_AT_DEVICE LPAC_APDU_AT_BAUD
 
-/usr/bin/lpac "$@"
+# lpac 在通道异常时会无限等待，加个上限；超时按失败返回
+timeout 180 /usr/bin/lpac "$@"
 rc=$?
 
 # 跑完再清一次：下载/启用等中途失败时 lpac 可能来不及关通道，
@@ -69,5 +77,4 @@ if [ -x /usr/bin/sms_tool ]; then
 	done
 fi
 
-[ -x "$SVC" ] && "$SVC" start >/dev/null 2>&1
 exit $rc

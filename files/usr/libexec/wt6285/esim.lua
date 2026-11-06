@@ -270,6 +270,9 @@ elseif action == "download" then
 		print("error=missing_params")
 		os.exit(1)
 	end
+	-- 激活码属于凭据，日志只留前 4 位
+	local ac_mask = (#ac > 4) and (ac:sub(1, 4) .. "***") or "***"
+	logline("download 请求 smdp=" .. smdp .. " ac=" .. ac_mask)
 	local cmd = "profile download -s " .. shq(smdp) .. " -m " .. shq(ac)
 	if cc ~= "" then cmd = cmd .. " -c " .. shq(cc) end
 	local out = run(LPAC_AT .. " " .. cmd)
@@ -430,7 +433,14 @@ elseif action == "enable" or action == "disable" then
 	end
 
 	print(ok and "result=ok" or ("error=" .. tostring(err)))
-	if not ok then os.exit(1) end
+	if not ok then
+		logline(action .. " " .. iccid .. " 失败 " .. tostring(err))
+		os.exit(1)
+	end
+	logline(action .. " " .. iccid .. " 成功")
+	-- 启用/禁用会改变 profileState，必须让缓存失效，
+	-- 否则页面最长 15 分钟仍显示旧状态
+	run("rm -f /tmp/wt6285-esim-list.out /tmp/wt6285-esim-notif-list.out")
 
 	-- 实测：AT+CFUN=1,1 不足以让基带重新附着，必须走 USB 重枚举 + ifup wan
 	-- 9>&- 关闭继承来的锁 fd，否则后台重启脚本会与父进程的 flock 死锁

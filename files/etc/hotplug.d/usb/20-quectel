@@ -20,8 +20,13 @@ detect_at_port() {
 case "$PRODUCT" in
 	2c7c/6005/*|2c7c/*)
 		(
-			sleep 6
-			P=$(detect_at_port)
+			# 模块刚枚举时 AT 口可能还没就绪，重试几轮再放弃
+			P=""
+			for i in 1 2 3 4 5; do
+				sleep 4
+				P=$(detect_at_port)
+				[ -n "$P" ] && break
+			done
 			if [ -n "$P" ]; then
 				[ "$(uci -q get lpac.main.at_device)" = "$P" ] || {
 					uci set lpac.main.at_device="$P"
