@@ -52,6 +52,14 @@ local function cache_age(p)
 	return now - t
 end
 
+local function last_lpa(out)
+	local final = ""
+	for line in out:gmatch("[^\n]+") do
+		if line:match('"type":"lpa"') then final = line end
+	end
+	return final
+end
+
 local function shq(x)
 	return "'" .. tostring(x):gsub("'", "'\\''") .. "'"
 end
@@ -192,7 +200,7 @@ local function serve_cache(act)
 	return true
 end
 
-if (action == "info" or action == "list") and serve_cache(action) then
+if (action == "info" or action == "list" or action == "notif-list") and serve_cache(action) then
 	os.exit(0)
 end
 
@@ -256,6 +264,57 @@ elseif action == "download" then
 		local msg = src:match('"message":"([^"]*)"') or "download_failed"
 		local dat = src:match('"data":"([^"]*)"') or ""
 		print("error=" .. msg .. (dat ~= "" and (":" .. dat) or ""))
+		os.exit(1)
+	end
+
+elseif action == "delete" then
+	local iccid = (arg[2] or ""):gsub("[^0-9A-Fa-f]", "")
+	if #iccid < 18 then
+		print("error=badiccid")
+		os.exit(1)
+	end
+	local out = run(LPAC_AT .. " profile delete " .. shq(iccid))
+	local final = last_lpa(out)
+	if final ~= "" and final:match('"code":0') then
+		run("rm -f /tmp/wt6285-esim-*.out")
+		print("result=ok")
+	else
+		local src = (final ~= "") and final or out
+		print("error=" .. (src:match('"message":"([^"]*)"') or "delete_failed"))
+		os.exit(1)
+	end
+
+elseif action == "notif-list" then
+	local out = run(LPAC_AT .. " notification list")
+	local final = last_lpa(out)
+	if final == "" or not final:match('"code":0') then
+		local src = (final ~= "") and final or out
+		print("error=" .. (src:match('"message":"([^"]*)"') or "notif_failed"))
+		os.exit(1)
+	end
+	-- 逐条抓 seqNumber / event / iccid（对象内无嵌套）
+	local n = 0
+	local buf = {}
+	for obj in final:gmatch("(%{[^{}]*seqNumber[^{}]*%})") do
+		local seq = obj:match('"seqNumber":(%d+)') or "?"
+		local ev  = obj:match('"event":"([^"]*)"') or "?"
+		local ic  = obj:match('"iccid":"([0-9A-Fa-f]*)"') or ""
+		n = n + 1
+		buf[#buf + 1] = string.format("n=%s|%s|%s", seq, ev, ic)
+	end
+	buf[#buf + 1] = "count=" .. n
+	local out_s = table.concat(buf, "\n") .. "\n"
+	print(out_s)
+	write_file(cache_path("notif-list"), out_s)
+
+elseif action == "notif-process" then
+	local out = run(LPAC_AT .. " notification process")
+	local final = last_lpa(out)
+	if final ~= "" and final:match('"code":0') then
+		print("result=ok")
+	else
+		local src = (final ~= "") and final or out
+		print("error=" .. (src:match('"message":"([^"]*)"') or "notif_process_failed"))
 		os.exit(1)
 	end
 

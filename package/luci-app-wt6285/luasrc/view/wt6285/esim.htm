@@ -43,6 +43,19 @@ do
 	end
 end
 
+-- 待处理通知
+local notifs = {}
+do
+	local out = run_esim("notif-list")
+	for line in out:gmatch("[^\n]+") do
+		local v = line:match("^n=(.*)$")
+		if v then
+			local seq, ev, ic = v:match("^([^|]*)|([^|]*)|(.*)$")
+			notifs[#notifs + 1] = { seq = seq or "", ev = ev or "", iccid = ic or "" }
+		end
+	end
+end
+
 local action = http.formvalue("act") or ""
 local acted_iccid = http.formvalue("iccid") or ""
 local result_msg, result_ok = nil, false
@@ -52,6 +65,20 @@ if action == "enable" or action == "disable" then
 	result_msg = result_ok
 		and ((action == "enable") and "已下发启用，模块正在重新搜网（约 20 秒）" or "已下发禁用，模块正在重新搜网（约 20 秒）")
 		or ("操作失败：" .. (out:match("error=([^\n]+)") or out))
+end
+
+if action == "delete" then
+	local out = run_esim("delete " .. (acted_iccid:gsub("[^0-9]", "")))
+	result_ok = out:match("result=ok") ~= nil
+	result_msg = result_ok and "配置文件已删除"
+		or ("删除失败：" .. (out:match("error=([^\n]+)") or out))
+end
+
+if action == "notif-process" then
+	local out = run_esim("notif-process")
+	result_ok = out:match("result=ok") ~= nil
+	result_msg = result_ok and "待处理通知已提交"
+		or ("处理失败：" .. (out:match("error=([^\n]+)") or out))
 end
 
 -- 下载日志（后台任务，页面只负责读）
@@ -152,11 +179,40 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 						<input class="cbi-button cbi-button-apply" type="submit" value="<%:启用%>" />
 					</form>
 <% end %>
+					<form method="post" style="display:inline;margin-left:6px" onsubmit="return confirm('删除该配置文件？此操作不可恢复。');">
+						<input type="hidden" name="act" value="delete" />
+						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
+						<input class="cbi-button cbi-button-remove" type="submit" value="<%:删除%>" />
+					</form>
 				</td>
 			</tr>
 <% end %>
 		</table>
 <% end %>
+	</div>
+
+	<div class="wt-sec">
+		<h3><%:待处理通知%></h3>
+<% if #notifs == 0 then %>
+		<div style="padding:14px 16px" class="wt-hint"><%:没有待处理通知%></div>
+<% else %>
+		<table class="wt-p">
+			<tr><th style="width:12%"><%:序号%></th><th style="width:48%"><%:事件%></th><th style="width:40%"><%:ICCID%></th></tr>
+<% for _, n in ipairs(notifs) do %>
+			<tr>
+				<td class="mono"><%=luci.util.pcdata(n.seq)%></td>
+				<td><%=luci.util.pcdata(n.ev)%></td>
+				<td class="mono"><%=luci.util.pcdata(n.iccid ~= "" and n.iccid or "-")%></td>
+			</tr>
+<% end %>
+		</table>
+		<form method="post" style="padding:12px 16px">
+			<input type="hidden" name="act" value="notif-process" />
+			<input class="cbi-button cbi-button-apply" type="submit" value="<%:处理全部通知%>"
+				onclick="return confirm('把待处理通知提交给 SM-DP+？需要联网。');" />
+		</form>
+<% end %>
+		<div class="wt-hint" style="padding:0 16px 12px"><%:通知是 eUICC 与 SM-DP+ 之间的事件回执，处理时需要能连到 SM-DP+。%></div>
 	</div>
 
 	<div class="wt-sec">
