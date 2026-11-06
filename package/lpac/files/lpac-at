@@ -11,17 +11,33 @@
 # 因此这里优先用 uci 配置，未配置则自动探测。
 
 AT_DEV="$(uci -q get lpac.main.at_device)"
-# uci 里配的路径可能属于另一种 USB 组成（MBIM 下是 ttyACM1，RNDIS 下是 ttyUSB1），
-# 不存在就重新探测，避免 "Failed to open device"。
-if [ ! -c "$AT_DEV" ]; then
-	if [ -c /dev/ttyACM1 ]; then
-		AT_DEV=/dev/ttyACM1
-	elif [ -c /dev/ttyUSB1 ]; then
-		AT_DEV=/dev/ttyUSB1
-	else
-		AT_DEV=/dev/ttyACM1
-	fi
+
+# 探测哪个串口真的能跑 AT：模组复位后 ACM 编号会漂移（ACM1 → ACM2），
+# 硬编码必然出事。这里逐个试 AT，取第一个回 OK 的口。
+probe_at() {
+	p="$1"
+	[ -c "$p" ] || return 1
+	stty -F "$p" 115200 raw -echo -crtscts 2>/dev/null
+	rm -f /tmp/lpac-at.probe
+	( timeout 2 cat "$p" > /tmp/lpac-at.probe 2>/dev/null & )
+	sleep 1
+	printf 'AT\r' > "$p" 2>/dev/null
+	sleep 1
+	grep -qa 'OK' /tmp/lpac-at.probe 2>/dev/null
+	# 等探测用的 cat 退出，否则它继续占着端口，lpac 一启动就撞
+	sleep 2
+}
+
+PICK=""
+if [ -n "$AT_DEV" ] && probe_at "$AT_DEV"; then
+	PICK="$AT_DEV"
+else
+	for p in /dev/ttyACM1 /dev/ttyACM0 /dev/ttyACM2 /dev/ttyACM3 \
+	         /dev/ttyUSB1 /dev/ttyUSB2 /dev/ttyUSB0 /dev/ttyUSB3; do
+		if probe_at "$p"; then PICK="$p"; break; fi
+	done
 fi
+[ -n "$PICK" ] && AT_DEV="$PICK"
 
 SVC=/etc/init.d/wt6285
 [ -x "$SVC" ] && "$SVC" stop >/dev/null 2>&1
