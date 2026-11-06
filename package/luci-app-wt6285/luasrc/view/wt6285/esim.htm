@@ -1,5 +1,8 @@
 <%
 local sys = require "luci.sys"
+-- luci.util.pcdata 已废弃，会刷 daemon.err；优先用 luci.xml.pcdata
+local _xml = require "luci.xml"
+local pcdata = (_xml and _xml.pcdata) or luci.util.pcdata
 local http = require "luci.http"
 
 local SCRIPT = "/usr/libexec/wt6285/esim.lua"
@@ -43,8 +46,12 @@ do
 	end
 end
 
--- 待处理通知
+-- 待处理通知：默认不加载（省一次 13 秒的 lpac 调用），
+-- 只有点"查看"或执行通知类动作时才读
+local show_notif = (http.formvalue("show_notif") == "1")
+	or ((http.formvalue("act") or ""):match("^notif") ~= nil)
 local notifs = {}
+if show_notif then
 do
 	local out = run_esim("notif-list")
 	for line in out:gmatch("[^\n]+") do
@@ -54,6 +61,7 @@ do
 			notifs[#notifs + 1] = { seq = seq or "", ev = ev or "", iccid = ic or "" }
 		end
 	end
+end
 end
 
 local function shq(x) return "'" .. tostring(x or ""):gsub("'", "'\\''") .. "'" end
@@ -177,18 +185,18 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 <div class="wt-wrap">
 
 <% if result_msg then %>
-	<div class="wt-banner <%= result_ok and "wt-banner-ok" or "wt-banner-err" %>"><%=luci.util.pcdata(result_msg)%></div>
+	<div class="wt-banner <%= result_ok and "wt-banner-ok" or "wt-banner-err" %>"><%=pcdata(result_msg)%></div>
 <% end %>
 
 	<div class="wt-card">
 		<div class="lbl"><%:eUICC EID%></div>
-		<div class="val"><%=luci.util.pcdata(eid)%></div>
+		<div class="val"><%=pcdata(eid)%></div>
 	</div>
 
 	<div class="wt-sec">
 		<h3><%:配置文件%></h3>
 <% if list_err then %>
-		<div style="padding:14px 16px" class="wt-hint"><%:读取失败%>：<%=luci.util.pcdata(list_err)%></div>
+		<div style="padding:14px 16px" class="wt-hint"><%:读取失败%>：<%=pcdata(list_err)%></div>
 <% elseif #profiles == 0 then %>
 		<div style="padding:14px 16px" class="wt-hint"><%:卡内没有配置文件%></div>
 <% else %>
@@ -201,8 +209,8 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 			</tr>
 <% for _, p in ipairs(profiles) do %>
 			<tr>
-				<td class="mono"><%=luci.util.pcdata(p.iccid)%></td>
-				<td><%=luci.util.pcdata(p.name ~= "" and p.name or "-")%></td>
+				<td class="mono"><%=pcdata(p.iccid)%></td>
+				<td><%=pcdata(p.name ~= "" and p.name or "-")%></td>
 				<td>
 <% if p.state == "01" then %>
 					<span class="wt-badge wt-on"><%:已启用%></span>
@@ -214,25 +222,25 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 <% if p.state == "01" then %>
 					<form method="post" style="display:inline" onsubmit="return confirm('确认禁用该配置文件？模块会重新搜网，当前数据连接会短暂中断。');">
 						<input type="hidden" name="act" value="disable" />
-						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
+						<input type="hidden" name="iccid" value="<%=pcdata(p.iccid)%>" />
 						<input class="cbi-button cbi-button-reset" type="submit" value="<%:禁用%>" />
 					</form>
 <% else %>
 					<form method="post" style="display:inline" onsubmit="return confirm('确认启用该配置文件？模块会重新搜网，当前数据连接会中断。');">
 						<input type="hidden" name="act" value="enable" />
-						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
+						<input type="hidden" name="iccid" value="<%=pcdata(p.iccid)%>" />
 						<input class="cbi-button cbi-button-apply" type="submit" value="<%:启用%>" />
 					</form>
 <% end %>
-					<form method="post" style="display:inline;margin-left:6px" onsubmit="var n=prompt('新的配置文件名称','<%=luci.util.pcdata(p.name)%>'); if(!n){return false;} this.nick.value=n; return true;">
+					<form method="post" style="display:inline;margin-left:6px" onsubmit="var n=prompt('新的配置文件名称','<%=pcdata(p.name)%>'); if(!n){return false;} this.nick.value=n; return true;">
 						<input type="hidden" name="act" value="rename" />
-						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
+						<input type="hidden" name="iccid" value="<%=pcdata(p.iccid)%>" />
 						<input type="hidden" name="nick" value="" />
 						<input class="cbi-button" type="submit" value="<%:重命名%>" />
 					</form>
 					<form method="post" style="display:inline;margin-left:6px" onsubmit="return confirm('删除该配置文件？此操作不可恢复。');">
 						<input type="hidden" name="act" value="delete" />
-						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
+						<input type="hidden" name="iccid" value="<%=pcdata(p.iccid)%>" />
 						<input class="cbi-button cbi-button-remove" type="submit" value="<%:删除%>" />
 					</form>
 				</td>
@@ -251,18 +259,18 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 			<tr><th style="width:10%"><%:序号%></th><th style="width:42%"><%:事件%></th><th style="width:28%"><%:ICCID%></th><th style="width:20%"><%:操作%></th></tr>
 <% for _, n in ipairs(notifs) do %>
 			<tr>
-				<td class="mono"><%=luci.util.pcdata(n.seq)%></td>
-				<td><%=luci.util.pcdata(n.ev)%></td>
-				<td class="mono"><%=luci.util.pcdata(n.iccid ~= "" and n.iccid or "-")%></td>
+				<td class="mono"><%=pcdata(n.seq)%></td>
+				<td><%=pcdata(n.ev)%></td>
+				<td class="mono"><%=pcdata(n.iccid ~= "" and n.iccid or "-")%></td>
 				<td>
 					<form method="post" style="display:inline" onsubmit="return confirm('发送这条通知给 SM-DP+？发送后通知仍保留在卡里。');">
 						<input type="hidden" name="act" value="notif-send" />
-						<input type="hidden" name="seq" value="<%=luci.util.pcdata(n.seq)%>" />
+						<input type="hidden" name="seq" value="<%=pcdata(n.seq)%>" />
 						<input class="cbi-button cbi-button-apply" type="submit" value="<%:发送%>" />
 					</form>
 					<form method="post" style="display:inline;margin-left:6px" onsubmit="return confirm('删除这条通知？仅从本地 eUICC 移除，不会通知 SM-DP+。');">
 						<input type="hidden" name="act" value="notif-remove" />
-						<input type="hidden" name="seq" value="<%=luci.util.pcdata(n.seq)%>" />
+						<input type="hidden" name="seq" value="<%=pcdata(n.seq)%>" />
 						<input class="cbi-button cbi-button-remove" type="submit" value="<%:删除%>" />
 					</form>
 				</td>
@@ -298,7 +306,7 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 				onclick="return confirm('开始下载新的 eSIM 配置文件？过程约 30–90 秒。');" />
 		</form>
 <% if dl_log and #dl_log > 0 then %>
-		<pre style="max-height:220px;overflow:auto;margin:0;padding:0 16px 12px;font-size:12px"><%=luci.util.pcdata(dl_log)%></pre>
+		<pre style="max-height:220px;overflow:auto;margin:0;padding:0 16px 12px;font-size:12px"><%=pcdata(dl_log)%></pre>
 <% end %>
 		<div class="wt-hint" style="padding:0 16px 12px">
 			<%:激活码形如 LPA:1$<smdp>$<matching-id>。下载走本机联网（WiFi 客户端即可），不需要 4G。%>
@@ -324,7 +332,7 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 <% if logtxt == "" then %>
 		<div style="padding:14px 16px" class="wt-hint"><%:暂无日志%></div>
 <% else %>
-		<pre style="max-height:280px;overflow:auto;margin:0;padding:12px 16px;font-size:12px;line-height:1.5;white-space:pre-wrap"><%=luci.util.pcdata(logtxt)%></pre>
+		<pre style="max-height:280px;overflow:auto;margin:0;padding:12px 16px;font-size:12px;line-height:1.5;white-space:pre-wrap"><%=pcdata(logtxt)%></pre>
 <% end %>
 		<div class="wt-hint" style="padding:0 16px 12px">
 			<%:记录下载、重命名、启用/禁用、通知发送与删除的请求和结果，最多保留 200 行。%>

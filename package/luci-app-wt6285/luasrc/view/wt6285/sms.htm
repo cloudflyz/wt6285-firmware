@@ -1,4 +1,7 @@
 <%
+local _xml = require "luci.xml"
+local pcdata = (_xml and _xml.pcdata) or luci.util.pcdata
+
 local sys = require "luci.sys"
 local http = require "luci.http"
 
@@ -144,7 +147,7 @@ end
 <div class="wt-wrap">
 
 <% if msg then %>
-	<div class="wt-banner <%= ok and "wt-ok" or "wt-err" %>"><%=luci.util.pcdata(msg)%></div>
+	<div class="wt-banner <%= ok and "wt-ok" or "wt-err" %>"><%=pcdata(msg)%></div>
 <% end %>
 
 	<div class="wt-sec">
@@ -156,8 +159,8 @@ end
 <% for _, m in ipairs(msgs) do %>
 			<div class="wt-msg">
 				<div class="hd">
-					<span><%=luci.util.pcdata(m.number)%></span>
-					<span><%=luci.util.pcdata(m.date)%></span>
+					<span><%=pcdata(m.number)%></span>
+					<span><%=pcdata(m.date)%></span>
 					<% if m.unread then %><span class="wt-badge wt-new"><%:未读%></span><% end %>
 					<span style="margin-left:auto">
 						<form method="post" style="display:inline">
@@ -167,7 +170,7 @@ end
 						</form>
 					</span>
 				</div>
-				<div class="tx"><%=luci.util.pcdata(m.text)%></div>
+				<div class="tx"><%=pcdata(m.text)%></div>
 			</div>
 <% end %>
 			<form method="post" style="margin-top:8px">
@@ -187,7 +190,7 @@ end
 				<input type="hidden" name="act" value="send" />
 				<div class="wt-row">
 					<label><%:号码%></label>
-					<input type="text" name="number" value="<%=luci.util.pcdata(uci("pnumber") ~= "" and ("+" .. uci("pnumber")) or "")%>" placeholder="+8613800000000" />
+					<input type="text" name="number" value="<%=pcdata(uci("pnumber") ~= "" and ("+" .. uci("pnumber")) or "")%>" placeholder="+8613800000000" />
 				</div>
 				<div class="wt-row" style="margin-top:10px">
 					<label><%:内容%></label>
@@ -215,11 +218,11 @@ end
 				</div>
 				<div class="wt-row">
 					<label><%:Bark Key%></label>
-					<input type="text" name="bark_key" value="<%=luci.util.pcdata(uci("bark_key"))%>" placeholder="点此填写 Bark 设备 Key" />
+					<input type="text" name="bark_key" value="<%=pcdata(uci("bark_key"))%>" placeholder="点此填写 Bark 设备 Key" />
 				</div>
 				<div class="wt-row">
 					<label><%:通知分组%></label>
-					<input type="text" name="bark_group" value="<%=luci.util.pcdata(uci("bark_group"))%>" placeholder="例如 短信（iOS 通知分组名）" />
+					<input type="text" name="bark_group" value="<%=pcdata(uci("bark_group"))%>" placeholder="例如 短信（iOS 通知分组名）" />
 				</div>
 				<div class="wt-row">
 					<label><%:加密推送%></label>
@@ -230,11 +233,11 @@ end
 				</div>
 				<div class="wt-row">
 					<label><%:加密密钥%></label>
-					<input type="text" name="bark_crypt_key" value="<%=luci.util.pcdata(uci("bark_crypt_key"))%>" placeholder="16 位，与 App 里设置的一致" maxlength="16" />
+					<input type="text" name="bark_crypt_key" value="<%=pcdata(uci("bark_crypt_key"))%>" placeholder="16 位，与 App 里设置的一致" maxlength="16" />
 				</div>
 				<div class="wt-row">
 					<label><%:自定义推送地址%></label>
-					<input type="text" name="notify_url" value="<%=luci.util.pcdata(uci("notify_url"))%>" placeholder="https://api.day.app/<key>（留空则用 Bark Key）" />
+					<input type="text" name="notify_url" value="<%=pcdata(uci("notify_url"))%>" placeholder="https://api.day.app/<key>（留空则用 Bark Key）" />
 				</div>
 				<div class="wt-actions">
 					<input class="cbi-button cbi-button-apply" type="submit" value="<%:保存设置%>" />
@@ -242,8 +245,8 @@ end
 			</form>
 			<form method="post" style="margin-top:10px">
 				<input type="hidden" name="act" value="test" />
-				<input type="hidden" name="notify_url" value="<%=luci.util.pcdata(uci("notify_url"))%>" />
-				<input type="hidden" name="bark_key" value="<%=luci.util.pcdata(uci("bark_key"))%>" />
+				<input type="hidden" name="notify_url" value="<%=pcdata(uci("notify_url"))%>" />
+				<input type="hidden" name="bark_key" value="<%=pcdata(uci("bark_key"))%>" />
 				<input class="cbi-button" type="submit" value="<%:测试推送%>" />
 			</form>
 		</div>
@@ -255,22 +258,22 @@ end
 			<form method="post">
 				<input type="hidden" name="act" value="save" />
 				<input type="hidden" name="notify_enabled" value="<%=uci("notify_enabled")%>" />
-				<input type="hidden" name="notify_url" value="<%=luci.util.pcdata(uci("notify_url"))%>" />
-				<input type="hidden" name="bark_key" value="<%=luci.util.pcdata(uci("bark_key"))%>" />
-				<input type="hidden" name="bark_group" value="<%=luci.util.pcdata(uci("bark_group"))%>" />
+				<input type="hidden" name="notify_url" value="<%=pcdata(uci("notify_url"))%>" />
+				<input type="hidden" name="bark_key" value="<%=pcdata(uci("bark_key"))%>" />
+				<input type="hidden" name="bark_group" value="<%=pcdata(uci("bark_group"))%>" />
 				<input type="hidden" name="bark_encrypt" value="<%=uci("bark_encrypt")%>" />
-				<input type="hidden" name="bark_crypt_key" value="<%=luci.util.pcdata(uci("bark_crypt_key"))%>" />
+				<input type="hidden" name="bark_crypt_key" value="<%=pcdata(uci("bark_crypt_key"))%>" />
 				<div class="wt-row">
 					<label><%:默认国家码%></label>
-					<input type="text" name="pnumber" value="<%=luci.util.pcdata(uci("pnumber"))%>" placeholder="86" />
+					<input type="text" name="pnumber" value="<%=pcdata(uci("pnumber"))%>" placeholder="86" />
 				</div>
 				<div class="wt-row">
 					<label><%:号码前缀%></label>
-					<input type="text" name="prefix" value="<%=luci.util.pcdata(uci("prefix"))%>" placeholder="1" />
+					<input type="text" name="prefix" value="<%=pcdata(uci("prefix"))%>" placeholder="1" />
 				</div>
 				<div class="wt-row">
 					<label><%:轮询间隔（秒）%></label>
-					<input type="text" name="checktime" value="<%=luci.util.pcdata(uci("checktime"))%>" placeholder="10" />
+					<input type="text" name="checktime" value="<%=pcdata(uci("checktime"))%>" placeholder="10" />
 				</div>
 				<div class="wt-row">
 					<label><%:存储位置%></label>
@@ -281,7 +284,7 @@ end
 				</div>
 				<div class="wt-row">
 					<label><%:AT 设备%></label>
-					<input type="text" name="atport" value="<%=luci.util.pcdata(uci("atport", "/dev/ttyUSB1"))%>" />
+					<input type="text" name="atport" value="<%=pcdata(uci("atport", "/dev/ttyUSB1"))%>" />
 				</div>
 				<div class="wt-actions">
 					<input class="cbi-button cbi-button-apply" type="submit" value="<%:保存设置%>" />

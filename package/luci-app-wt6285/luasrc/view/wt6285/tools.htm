@@ -1,4 +1,7 @@
 <%
+local _xml = require "luci.xml"
+local pcdata = (_xml and _xml.pcdata) or luci.util.pcdata
+
 local sys = require "luci.sys"
 
 -- 读取一眼可见的状态，避免进工具页还要再点一次
@@ -36,7 +39,7 @@ local cards = {
 	<div class="wt-hub-sec">
 		<div class="lbl"><%:当前 AT 口%></div>
 		<div class="val">
-			<%=luci.util.pcdata(atdev ~= "" and atdev or "(未配置)")%>
+			<%=pcdata(atdev ~= "" and atdev or "(未配置)")%>
 <% if atdev_ok then %>
 				<span style="color:#1e8449">● 存在</span>
 <% else %>
@@ -44,14 +47,14 @@ local cards = {
 <% end %>
 		</div>
 		<div class="d" style="font-size:12px;opacity:.6;margin-top:6px">
-			<%:检测到的串口%>：<%=luci.util.pcdata(ports ~= "" and ports or "无")%>
+			<%:检测到的串口%>：<%=pcdata(ports ~= "" and ports or "无")%>
 		</div>
 	</div>
 
 <% for _, c in ipairs(cards) do %>
 	<a class="wt-hub-card" href="<%=luci.dispatcher.build_url("admin/modem/wt6285/" .. c.href)%>">
-		<div class="t"><%=luci.util.pcdata(c.title)%></div>
-		<div class="d"><%=luci.util.pcdata(c.desc)%></div>
+		<div class="t"><%=pcdata(c.title)%></div>
+		<div class="d"><%=pcdata(c.desc)%></div>
 	</a>
 <% end %>
 

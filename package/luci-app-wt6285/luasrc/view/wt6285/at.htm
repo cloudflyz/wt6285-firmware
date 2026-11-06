@@ -1,4 +1,7 @@
 <%
+local _xml = require "luci.xml"
+local pcdata = (_xml and _xml.pcdata) or luci.util.pcdata
+
 local cmd = cmd or ""
 local output = output or ""
 local tmo = tmo or 10
@@ -32,7 +35,7 @@ pre.wt-at-out { margin: 0; padding: 14px 16px; min-height: 160px; max-height: 46
 		<h3><%:当前 AT 口%></h3>
 		<div class="wt-at-body">
 			<div class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px">
-				<%=luci.util.pcdata(atdev ~= "" and atdev or "(未配置)")%>
+				<%=pcdata(atdev ~= "" and atdev or "(未配置)")%>
 <% if atdev_ok then %>
 					<span style="color:#1e8449">● 存在</span>
 <% else %>
@@ -40,7 +43,7 @@ pre.wt-at-out { margin: 0; padding: 14px 16px; min-height: 160px; max-height: 46
 <% end %>
 			</div>
 			<div class="wt-hint" style="margin-top:6px">
-				<%:检测到的串口%>：<%=luci.util.pcdata(ports ~= "" and ports or "无")%>
+				<%:检测到的串口%>：<%=pcdata(ports ~= "" and ports or "无")%>
 			</div>
 			<div class="wt-hint" style="margin-top:4px">
 				<%:口不对时先看这里；模块换 USB 组成后端口名会变（ACM ⇄ USB）。%>
@@ -70,7 +73,7 @@ pre.wt-at-out { margin: 0; padding: 14px 16px; min-height: 160px; max-height: 46
 		<div class="wt-at-box">
 			<h3><%:发送指令%></h3>
 			<div class="wt-at-body">
-				<textarea class="wt-at-input" name="cmd" spellcheck="false" placeholder="AT+CSQ"><%=luci.util.pcdata(cmd)%></textarea>
+				<textarea class="wt-at-input" name="cmd" spellcheck="false" placeholder="AT+CSQ"><%=pcdata(cmd)%></textarea>
 				<div class="wt-at-row">
 					<input class="cbi-button cbi-button-apply" type="submit" value="<%:执行%>" />
 					<input class="cbi-button" type="button" value="<%:清空输出%>" onclick="document.getElementById('wt-out').textContent='';" />
@@ -88,7 +91,7 @@ pre.wt-at-out { margin: 0; padding: 14px 16px; min-height: 160px; max-height: 46
 
 	<div class="wt-at-box">
 		<h3><%:输出%></h3>
-		<pre class="wt-at-out" id="wt-out"><% if output ~= "" then %><%=luci.util.pcdata(output)%><% else %><span class="wt-empty"><%:尚无输出%></span><% end %></pre>
+		<pre class="wt-at-out" id="wt-out"><% if output ~= "" then %><%=pcdata(output)%><% else %><span class="wt-empty"><%:尚无输出%></span><% end %></pre>
 	</div>
 
 </div>
