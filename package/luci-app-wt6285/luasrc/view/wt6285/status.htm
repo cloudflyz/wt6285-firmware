@@ -8,6 +8,21 @@ for line in out:gmatch("[^\n]+") do
 	if k then kv[k] = v end
 end
 
+-- eSIM 摘要：只读 eSIM 页留下的缓存，不额外跑 lpac（否则状态页要慢 13 秒）
+local esim_txt = ""
+do
+	local f = io.open("/tmp/wt6285-esim-list.out")
+	if f then esim_txt = f:read("*a") or "" f:close() end
+end
+local esim_count, esim_active = 0, nil
+for line in esim_txt:gmatch("[^\n]+") do
+	local ic, st, nm = line:match("^p=([^|]*)|([^|]*)|([^|]*)")
+	if ic then
+		esim_count = esim_count + 1
+		if st == "01" then esim_active = nm or ic end
+	end
+end
+
 local function v(key, def)
 	local s = kv[key]
 	if s == nil or s == "" then return def or "-" end
@@ -94,6 +109,17 @@ end
 <% end %>
 
 	<div class="wt-cards">
+		<div class="wt-card">
+			<div class="lbl"><%:eSIM 配置文件%></div>
+			<div class="val"><% if esim_count > 0 then %><%=esim_count%><% else %>-<% end %></div>
+			<div class="sub">
+<% if esim_count > 0 then %>
+				<%:当前启用%>：<%=luci.util.pcdata(esim_active or "无")%>
+<% else %>
+				<%:进 eSIM 页后显示%>
+<% end %>
+			</div>
+		</div>
 		<div class="wt-card">
 			<div class="lbl"><%:信号强度%></div>
 			<div class="val"><%=(csq > 0 and csq < 99) and (rssi .. " dBm") or "无信号"%></div>

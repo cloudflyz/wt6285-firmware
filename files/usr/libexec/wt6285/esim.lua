@@ -62,13 +62,13 @@ end
 
 -- ---------------------------------------------------------------- 操作日志
 -- 页面要能看到"做了什么、结果如何"，否则出问题只能靠 SSH 翻现场。
-local LOGF = "/tmp/wt6285-esim.log"
+local LOGF = "/root/wt6285-esim.log"
 
 local function trim_log()
-	local out = run("wc -l < " .. LOGF .. " 2>/dev/null")
-	local n = tonumber((out or ""):match("%d+") or "")
-	if n and n > 300 then
-		run("tail -n 200 " .. LOGF .. " > " .. LOGF .. ".tmp && mv " .. LOGF .. ".tmp " .. LOGF)
+	-- 落盘在 /root，按大小轮转，避免长期运行把 flash 写满
+	local sz = tonumber((run("stat -c %s " .. LOGF .. " 2>/dev/null") or ""):match("%d+") or "")
+	if sz and sz > 65536 then
+		run("mv " .. LOGF .. " " .. LOGF .. ".1 2>/dev/null")
 	end
 end
 
@@ -80,6 +80,55 @@ local function logline(msg)
 		f:close()
 	end
 	trim_log()
+end
+
+-- ---------------------------------------------------------------- 业务互斥
+-- AT 口有 flock 串行化，但两个业务动作仍会互相覆盖（例如同时启用两个 profile）。
+-- 用 mkdir 做原子锁，10 分钟视为陈旧自动清理。
+local BUSY = "/var/lock/wt6285-esim.busy"
+local LOCKED = false
+
+local function read_lock_ts()
+	local f = io.open(BUSY .. "/ts", "r")
+	if not f then return nil end
+	local line = f:read("*l")
+	f:close()
+	return tonumber((line or ""):match("^%s*(%d+)"))
+end
+
+local function lock_acquire()
+	-- 两个坑（都实测踩过）：
+	--  1. busybox 的 `stat -c %Y` 返回 0，按 mtime 判陈旧会把新锁当过期删掉
+	--  2. 用 shell `cat` 读不存在的 ts，错误信息里的路径含 "wt6285"，
+	--     被 match("%d+") 抓成时间戳 6285 → 永远判过期 → 锁形同虚设
+	-- 所以时间戳只用 Lua 读文件，超时判断用 os.time()。
+	local exists = (run("test -d " .. BUSY .. " >/dev/null 2>&1 && echo yes") or ""):match("yes")
+	if exists then
+		local ts = read_lock_ts()
+		if not (ts and (os.time() - ts) > 600) then
+			return false
+		end
+		run("rm -rf " .. BUSY)
+	end
+	if (run("mkdir " .. BUSY .. " >/dev/null 2>&1 && echo ok") or ""):match("ok") then
+		local f = io.open(BUSY .. "/ts", "w")
+		if f then f:write(tostring(os.time())) f:close() end
+		LOCKED = true
+		return true
+	end
+	return false
+end
+
+local function lock_release()
+	if LOCKED then
+		run("rm -rf " .. BUSY)
+		LOCKED = false
+	end
+end
+
+local function finish(code)
+	lock_release()
+	os.exit(code or 0)
 end
 
 local function shq(x)
@@ -224,7 +273,16 @@ local function serve_cache(act)
 end
 
 if (action == "info" or action == "list" or action == "notif-list") and serve_cache(action) then
-	os.exit(0)
+	finish(0)
+end
+
+-- 变更类动作串行化：拿不到锁直接返回 busy，不排队
+local mutation = (action == "download" or action == "delete" or action == "rename"
+	or action == "enable" or action == "disable"
+	or action == "notif-send" or action == "notif-remove" or action == "notif-process")
+if mutation and not lock_acquire() then
+	print("error=busy")
+	finish(1)
 end
 
 if action == "info" then
@@ -236,7 +294,7 @@ if action == "info" then
 	end
 	if not eid then
 		print("error=" .. tostring(err))
-		os.exit(1)
+		finish(1)
 	end
 	local out = "eid=" .. eid
 	print(out)
@@ -251,7 +309,7 @@ elseif action == "list" then
 	end
 	if not list then
 		print("error=" .. tostring(err))
-		os.exit(1)
+		finish(1)
 	end
 	local buf = {"count=" .. #list}
 	for _, p in ipairs(list) do
@@ -268,7 +326,7 @@ elseif action == "download" then
 	local cc   = arg[4] or ""
 	if smdp == "" or ac == "" then
 		print("error=missing_params")
-		os.exit(1)
+		finish(1)
 	end
 	-- 激活码属于凭据，日志只留前 4 位
 	local ac_mask = (#ac > 4) and (ac:sub(1, 4) .. "***") or "***"
@@ -292,14 +350,14 @@ elseif action == "download" then
 		local dat = src:match('"data":"([^"]*)"') or ""
 		logline("download 失败 " .. msg .. (dat ~= "" and (":" .. dat) or ""))
 		print("error=" .. msg .. (dat ~= "" and (":" .. dat) or ""))
-		os.exit(1)
+		finish(1)
 	end
 
 elseif action == "delete" then
 	local iccid = (arg[2] or ""):gsub("[^0-9A-Fa-f]", "")
 	if #iccid < 18 then
 		print("error=badiccid")
-		os.exit(1)
+		finish(1)
 	end
 	logline("delete " .. iccid)
 	local out = run(LPAC_AT .. " profile delete " .. shq(iccid))
@@ -310,7 +368,7 @@ elseif action == "delete" then
 	else
 		local src = (final ~= "") and final or out
 		print("error=" .. (src:match('"message":"([^"]*)"') or "delete_failed"))
-		os.exit(1)
+		finish(1)
 	end
 
 elseif action == "rename" then
@@ -319,11 +377,11 @@ elseif action == "rename" then
 	local name  = arg[3] or ""
 	if #iccid < 18 then
 		print("error=badiccid")
-		os.exit(1)
+		finish(1)
 	end
 	if name == "" then
 		print("error=emptyname")
-		os.exit(1)
+		finish(1)
 	end
 	logline("rename " .. iccid .. " → " .. name)
 	local out = run(LPAC_AT .. " profile nickname " .. shq(iccid) .. " " .. shq(name))
@@ -334,7 +392,7 @@ elseif action == "rename" then
 	else
 		local src = (final ~= "") and final or out
 		print("error=" .. (src:match('"message":"([^"]*)"') or "rename_failed"))
-		os.exit(1)
+		finish(1)
 	end
 
 elseif action == "notif-send" then
@@ -342,7 +400,7 @@ elseif action == "notif-send" then
 	local seq = (arg[2] or ""):gsub("[^0-9]", "")
 	if seq == "" then
 		print("error=badseq")
-		os.exit(1)
+		finish(1)
 	end
 	logline("notif-send seq=" .. seq)
 	local out = run(LPAC_AT .. " notification process " .. seq)
@@ -356,7 +414,7 @@ elseif action == "notif-send" then
 		local msg = src:match('"message":"([^"]*)"') or "notif_send_failed"
 		logline("notif-send seq=" .. seq .. " 失败 " .. msg)
 		print("error=" .. msg)
-		os.exit(1)
+		finish(1)
 	end
 
 elseif action == "notif-remove" then
@@ -364,7 +422,7 @@ elseif action == "notif-remove" then
 	local seq = (arg[2] or ""):gsub("[^0-9]", "")
 	if seq == "" then
 		print("error=badseq")
-		os.exit(1)
+		finish(1)
 	end
 	logline("notif-remove seq=" .. seq)
 	local out = run(LPAC_AT .. " notification remove " .. seq)
@@ -375,7 +433,7 @@ elseif action == "notif-remove" then
 	else
 		local src = (final ~= "") and final or out
 		print("error=" .. (src:match('"message":"([^"]*)"') or "notif_remove_failed"))
-		os.exit(1)
+		finish(1)
 	end
 
 elseif action == "notif-list" then
@@ -384,7 +442,7 @@ elseif action == "notif-list" then
 	if final == "" or not final:match('"code":0') then
 		local src = (final ~= "") and final or out
 		print("error=" .. (src:match('"message":"([^"]*)"') or "notif_failed"))
-		os.exit(1)
+		finish(1)
 	end
 	-- 逐条抓 seqNumber / event / iccid（对象内无嵌套）
 	local n = 0
@@ -415,14 +473,14 @@ elseif action == "notif-process" then
 	else
 		local src = (final ~= "") and final or out
 		print("error=" .. (src:match('"message":"([^"]*)"') or "notif_process_failed"))
-		os.exit(1)
+		finish(1)
 	end
 
 elseif action == "enable" or action == "disable" then
 	local iccid = (arg[2] or ""):gsub("[^0-9A-Fa-f]", "")
 	if #iccid < 18 then
 		print("error=badiccid")
-		os.exit(1)
+		finish(1)
 	end
 
 	local ok, err
@@ -435,7 +493,7 @@ elseif action == "enable" or action == "disable" then
 	print(ok and "result=ok" or ("error=" .. tostring(err)))
 	if not ok then
 		logline(action .. " " .. iccid .. " 失败 " .. tostring(err))
-		os.exit(1)
+		finish(1)
 	end
 	logline(action .. " " .. iccid .. " 成功")
 	-- 启用/禁用会改变 profileState，必须让缓存失效，
@@ -449,5 +507,5 @@ elseif action == "enable" or action == "disable" then
 
 else
 	print("usage: esim.lua info|list|enable <ICCID>|disable <ICCID>")
-	os.exit(2)
+	finish(2)
 end

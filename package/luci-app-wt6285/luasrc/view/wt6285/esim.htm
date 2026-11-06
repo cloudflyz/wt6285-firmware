@@ -302,11 +302,31 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 				<div class="lbl"><%:确认码（可选）%></div>
 				<input class="cbi-input-text" style="width:100%" name="cc" placeholder="SM-DP+ 要求确认码时填写" />
 			</div>
+			<input class="cbi-button" type="button" value="<%:刷新日志%>" onclick="location.reload()" style="margin-left:8px" />
 			<input class="cbi-button cbi-button-apply" type="submit" value="<%:开始下载%>"
 				onclick="return confirm('开始下载新的 eSIM 配置文件？过程约 30–90 秒。');" />
 		</form>
 <% if dl_log and #dl_log > 0 then %>
-		<pre style="max-height:220px;overflow:auto;margin:0;padding:0 16px 12px;font-size:12px"><%=pcdata(dl_log)%></pre>
+<%
+	-- lpac 的 progress 事件是英文阶段名，翻一下，失败时一眼能看出卡在哪步
+	local stages = {
+		es10a_get_euicc_configured_addresses = "读取卡内配置地址",
+		es10b_get_euicc_challenge_and_info  = "获取 eUICC 挑战",
+		es9p_initiate_authentication        = "与 SM-DP+ 建立认证",
+		es9p_authenticate_client            = "eUICC 认证服务器",
+		es10b_prepare_download              = "准备下载",
+		es9p_get_bound_profile_package      = "下载 profile 包",
+		es10b_load_bound_profile_package    = "写入 profile 到卡",
+		es9p_handle_notification            = "发送通知",
+		es10b_cancel_session                = "取消本地会话",
+		es9p_cancel_session                 = "取消服务端会话",
+	}
+	local shown = dl_log
+	for k, v in pairs(stages) do
+		shown = shown:gsub(k, v .. "(" .. k .. ")")
+	end
+%>
+		<pre style="max-height:220px;overflow:auto;margin:0;padding:0 16px 12px;font-size:12px"><%=pcdata(shown)%></pre>
 <% end %>
 		<div class="wt-hint" style="padding:0 16px 12px">
 			<%:激活码形如 LPA:1$<smdp>$<matching-id>。下载走本机联网（WiFi 客户端即可），不需要 4G。%>

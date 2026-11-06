@@ -170,3 +170,31 @@ upstream.lock  pinned lean commit
 ## License
 
 自用项目。集成的第三方组件遵循各自许可：`lpac` AGPL-3.0-only / LGPL-2.0-only，`sms-tool` Apache-2.0，`quectel-cm` 见上游。
+
+## eSIM 能力与限制
+
+固件内置 `lpac`（**AT 后端**，走 `AT+CCHO`/`AT+CGLA`/`AT+CCHC` 逻辑通道），
+LuCI 的 eSIM 页面支持：读取 EID、列 profile、启用/禁用、重命名、删除、
+下载新 profile（SM-DP+ 地址 + 激活码，支持直接粘贴 `LPA:1$<smdp>$<matching-id>` 整串）、
+以及通知的列表/单条发送/单条删除。
+
+### 关键事实
+
+- `AT+CSIM` 这条命令在 EC200A 上**不支持**（返回 `+CME ERROR: 4`），
+  所以不要按"裸 APDU"思路排查；逻辑通道那组命令是可用的。
+- 插卡必须在**整机断电**状态下进行，热插拔不会重新识别 SIM
+  （表现为 `AT+CPIN? → CME ERROR: 10`、`QSIMSTAT 0,0`）。
+- AT 口随 USB 组成变化：MBIM/ECM 组成是 `/dev/ttyACM*`，RNDIS 组成是 `/dev/ttyUSB*`，
+  复位后编号还会漂移。固件在模块枚举时自动探测并写入
+  `lpac.main.at_device` 与 `sms_tool.general.atport`。
+- 跑 lpac 前必须让出 AT 口（`wt6285` 服务、`sms_tool`、手工 `cat` 都会占用），
+  统一通过 `/usr/bin/lpac-at` 调用：它会停服务、清残留逻辑通道、跑完再恢复服务。
+- 每次失败的 lpac 都可能漏一个逻辑通道，通道耗尽后只会返回 `euicc_init`；
+  这是"卡不支持"的常见误判来源，`lpac-at` 已在调用前后各清一次。
+
+### 已知限制
+
+- 本项目的测试卡根证书为 `testrootsmds.gsma.com`（GSMA 测试根），
+  **商用运营商的激活码无法下载**；需要测试 SM-DP+ 的激活码或换成商用时证书的 eUICC。
+- 启用/禁用会触发模块硬复位（USB 重枚举），期间数据与 AT 都会短暂中断。
+- 页面结果缓存 15 分钟；启用/禁用、下载、重命名、删除、通知操作会主动失效缓存。
