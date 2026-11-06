@@ -284,6 +284,47 @@ elseif action == "delete" then
 		os.exit(1)
 	end
 
+elseif action == "rename" then
+	-- lpac profile nickname <iccid> <new_name>
+	local iccid = (arg[2] or ""):gsub("[^0-9A-Fa-f]", "")
+	local name  = arg[3] or ""
+	if #iccid < 18 then
+		print("error=badiccid")
+		os.exit(1)
+	end
+	if name == "" then
+		print("error=emptyname")
+		os.exit(1)
+	end
+	local out = run(LPAC_AT .. " profile nickname " .. shq(iccid) .. " " .. shq(name))
+	local final = last_lpa(out)
+	if final ~= "" and final:match('"code":0') then
+		run("rm -f /tmp/wt6285-esim-*.out")
+		print("result=ok")
+	else
+		local src = (final ~= "") and final or out
+		print("error=" .. (src:match('"message":"([^"]*)"') or "rename_failed"))
+		os.exit(1)
+	end
+
+elseif action == "notif-remove" then
+	-- lpac notification remove <seqNumber>
+	local seq = (arg[2] or ""):gsub("[^0-9]", "")
+	if seq == "" then
+		print("error=badseq")
+		os.exit(1)
+	end
+	local out = run(LPAC_AT .. " notification remove " .. seq)
+	local final = last_lpa(out)
+	if final ~= "" and final:match('"code":0') then
+		run("rm -f /tmp/wt6285-esim-notif-list.out")
+		print("result=ok")
+	else
+		local src = (final ~= "") and final or out
+		print("error=" .. (src:match('"message":"([^"]*)"') or "notif_remove_failed"))
+		os.exit(1)
+	end
+
 elseif action == "notif-list" then
 	local out = run(LPAC_AT .. " notification list")
 	local final = last_lpa(out)
@@ -308,9 +349,11 @@ elseif action == "notif-list" then
 	write_file(cache_path("notif-list"), out_s)
 
 elseif action == "notif-process" then
+	-- 注意：只提交，不删除。删不删由使用者逐条决定。
 	local out = run(LPAC_AT .. " notification process")
 	local final = last_lpa(out)
 	if final ~= "" and final:match('"code":0') then
+		run("rm -f /tmp/wt6285-esim-notif-list.out")
 		print("result=ok")
 	else
 		local src = (final ~= "") and final or out

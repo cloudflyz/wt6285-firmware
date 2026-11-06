@@ -1,6 +1,10 @@
 <%
 local cmd = cmd or ""
 local output = output or ""
+local tmo = tmo or 10
+local atdev = atdev or ""
+local atdev_ok = atdev_ok
+local ports = ports or ""
 %>
 
 <%+header%>
@@ -25,13 +29,35 @@ pre.wt-at-out { margin: 0; padding: 14px 16px; min-height: 160px; max-height: 46
 <div class="wt-at-wrap">
 
 	<div class="wt-at-box">
+		<h3><%:当前 AT 口%></h3>
+		<div class="wt-at-body">
+			<div class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px">
+				<%=luci.util.pcdata(atdev ~= "" and atdev or "(未配置)")%>
+<% if atdev_ok then %>
+					<span style="color:#1e8449">● 存在</span>
+<% else %>
+					<span style="color:#c0392b">● 不可用</span>
+<% end %>
+			</div>
+			<div class="wt-hint" style="margin-top:6px">
+				<%:检测到的串口%>：<%=luci.util.pcdata(ports ~= "" and ports or "无")%>
+			</div>
+			<div class="wt-hint" style="margin-top:4px">
+				<%:口不对时先看这里；模块换 USB 组成后端口名会变（ACM ⇄ USB）。%>
+			</div>
+		</div>
+	</div>
+
+	<div class="wt-at-box">
 		<h3><%:常用指令%></h3>
 		<div class="wt-at-body">
 			<div class="wt-at-chips">
 				<% for _, c in ipairs({
 					"AT+CSQ", "AT+CGSN", "AT+QCCID", "AT+CPIN?", "AT+CREG?",
 					"AT+COPS?", "AT+QNWINFO", "AT+QCSQ", "AT+CFUN?",
-					"AT+QCFG=\"usbnet\"", "AT+QENG=\"servingcell\""
+					"AT+QCFG=\"usbnet\"", "AT+QENG=\"servingcell\"",
+					"AT+CCHO=?", "AT+CCHC=?", "AT+CGLA=", "AT+CSIM=?",
+					"AT+CGDCONT?", "AT+QNETDEVCTL?", "AT+CGATT?", "AT+QPOWD=0"
 				}) do %>
 					<button type="button" data-cmd="<%=c%>"><%=c%></button>
 				<% end %>
@@ -48,7 +74,13 @@ pre.wt-at-out { margin: 0; padding: 14px 16px; min-height: 160px; max-height: 46
 				<div class="wt-at-row">
 					<input class="cbi-button cbi-button-apply" type="submit" value="<%:执行%>" />
 					<input class="cbi-button" type="button" value="<%:清空输出%>" onclick="document.getElementById('wt-out').textContent='';" />
-					<span class="wt-hint"><%:超时 6 秒/条，输出为原始回显%></span>
+					<label class="wt-hint" style="display:flex;gap:6px;align-items:center">
+						<%:超时%>
+						<input class="cbi-input-text" style="width:64px" type="number" name="tmo" min="3" max="30" value="<%=tmo%>" />
+						<%:秒/条%>
+					</label>
+					<input class="cbi-button" type="button" value="<%:复制输出%>"
+						onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('wt-out').innerText);this.value='已复制';" />
 				</div>
 			</div>
 		</div>

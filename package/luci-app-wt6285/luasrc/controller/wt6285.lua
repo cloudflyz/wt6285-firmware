@@ -18,10 +18,14 @@ function action_esim()
 	luci.template.render("wt6285/esim")
 end
 
--- AT 指令控制台：逐行执行，带 6 秒超时
+-- AT 指令控制台：逐行执行，超时可按需调整（默认 10 秒）
 function action_at()
 	local cmd = luci.http.formvalue("cmd") or ""
 	cmd = cmd:gsub("\r\n", "\n"):gsub("\r", "\n")
+
+	local tmo = tonumber(luci.http.formvalue("tmo") or "") or 10
+	if tmo < 3 then tmo = 3 end
+	if tmo > 30 then tmo = 30 end
 
 	local lines = {}
 	for line in cmd:gmatch("[^\n]+") do
@@ -29,18 +33,30 @@ function action_at()
 		if #s > 0 then lines[#lines + 1] = s end
 	end
 
+	-- 当前 AT 口与实际存在的串口，便于排查"口选错了"
+	local atdev = (luci.sys.exec("uci -q get lpac.main.at_device") or ""):gsub("%s+$", "")
+	local ports = (luci.sys.exec("ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null | tr '\\n' ' '") or ""):gsub("%s+$", "")
+	local atdev_ok = (atdev ~= "" and luci.fs.access(atdev)) and true or false
+
 	local out = {}
+	local t0 = os.time()
 	for _, l in ipairs(lines) do
-		local res = luci.sys.exec("timeout 6 /usr/libexec/wt6285/at.sh " .. shquote(l) .. " 2>&1") or ""
+		local started = os.clock()
+		local res = luci.sys.exec(string.format("timeout %d /usr/libexec/wt6285/at.sh %s 2>&1", tmo, shquote(l))) or ""
+		local cost = string.format("%.1f", os.clock() - started)
 		res = res:gsub("%s+$", "")
-		out[#out + 1] = "=== " .. l .. " ==="
+		out[#out + 1] = string.format("=== %s === [%ss]", l, cost)
 		out[#out + 1] = (#res > 0) and res or "(无输出)"
 		out[#out + 1] = ""
 	end
 
 	luci.template.render("wt6285/at", {
 		cmd = cmd,
-		output = table.concat(out, "\n")
+		output = table.concat(out, "\n"),
+		tmo = tmo,
+		atdev = atdev,
+		atdev_ok = atdev_ok,
+		ports = ports
 	})
 end
 

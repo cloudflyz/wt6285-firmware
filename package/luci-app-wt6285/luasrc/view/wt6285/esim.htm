@@ -56,6 +56,8 @@ do
 	end
 end
 
+local function shq(x) return "'" .. tostring(x or ""):gsub("'", "'\\''") .. "'" end
+
 local action = http.formvalue("act") or ""
 local acted_iccid = http.formvalue("iccid") or ""
 local result_msg, result_ok = nil, false
@@ -72,6 +74,26 @@ if action == "delete" then
 	result_ok = out:match("result=ok") ~= nil
 	result_msg = result_ok and "配置文件已删除"
 		or ("删除失败：" .. (out:match("error=([^\n]+)") or out))
+end
+
+if action == "rename" then
+	local nick = http.formvalue("nick") or ""
+	if nick == "" then
+		result_ok, result_msg = false, "名称不能为空"
+	else
+		local out = run_esim("rename " .. (acted_iccid:gsub("[^0-9]", "")) .. " " .. shq(nick))
+		result_ok = out:match("result=ok") ~= nil
+		result_msg = result_ok and ("已重命名为 " .. nick)
+			or ("重命名失败：" .. (out:match("error=([^\n]+)") or out))
+	end
+end
+
+if action == "notif-remove" then
+	local seq = (http.formvalue("seq") or ""):gsub("[^0-9]", "")
+	local out = run_esim("notif-remove " .. seq)
+	result_ok = out:match("result=ok") ~= nil
+	result_msg = result_ok and ("通知 " .. seq .. " 已删除")
+		or ("删除通知失败：" .. (out:match("error=([^\n]+)") or out))
 end
 
 if action == "notif-process" then
@@ -179,6 +201,12 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 						<input class="cbi-button cbi-button-apply" type="submit" value="<%:启用%>" />
 					</form>
 <% end %>
+					<form method="post" style="display:inline;margin-left:6px" onsubmit="var n=prompt('新的配置文件名称','<%=luci.util.pcdata(p.name)%>'); if(!n){return false;} this.nick.value=n; return true;">
+						<input type="hidden" name="act" value="rename" />
+						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
+						<input type="hidden" name="nick" value="" />
+						<input class="cbi-button" type="submit" value="<%:重命名%>" />
+					</form>
 					<form method="post" style="display:inline;margin-left:6px" onsubmit="return confirm('删除该配置文件？此操作不可恢复。');">
 						<input type="hidden" name="act" value="delete" />
 						<input type="hidden" name="iccid" value="<%=luci.util.pcdata(p.iccid)%>" />
@@ -197,12 +225,19 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 		<div style="padding:14px 16px" class="wt-hint"><%:没有待处理通知%></div>
 <% else %>
 		<table class="wt-p">
-			<tr><th style="width:12%"><%:序号%></th><th style="width:48%"><%:事件%></th><th style="width:40%"><%:ICCID%></th></tr>
+			<tr><th style="width:10%"><%:序号%></th><th style="width:42%"><%:事件%></th><th style="width:28%"><%:ICCID%></th><th style="width:20%"><%:操作%></th></tr>
 <% for _, n in ipairs(notifs) do %>
 			<tr>
 				<td class="mono"><%=luci.util.pcdata(n.seq)%></td>
 				<td><%=luci.util.pcdata(n.ev)%></td>
 				<td class="mono"><%=luci.util.pcdata(n.iccid ~= "" and n.iccid or "-")%></td>
+				<td>
+					<form method="post" style="display:inline" onsubmit="return confirm('删除这条通知？仅从本地 eUICC 移除，不会通知 SM-DP+。');">
+						<input type="hidden" name="act" value="notif-remove" />
+						<input type="hidden" name="seq" value="<%=luci.util.pcdata(n.seq)%>" />
+						<input class="cbi-button cbi-button-remove" type="submit" value="<%:删除%>" />
+					</form>
+				</td>
 			</tr>
 <% end %>
 		</table>
@@ -212,7 +247,7 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 				onclick="return confirm('把待处理通知提交给 SM-DP+？需要联网。');" />
 		</form>
 <% end %>
-		<div class="wt-hint" style="padding:0 16px 12px"><%:通知是 eUICC 与 SM-DP+ 之间的事件回执，处理时需要能连到 SM-DP+。%></div>
+		<div class="wt-hint" style="padding:0 16px 12px"><%:通知是 eUICC 与 SM-DP+ 之间的事件回执，处理时需要能连到 SM-DP+。处理后不会自动删除，删不删由你逐条决定。%></div>
 	</div>
 
 	<div class="wt-sec">
