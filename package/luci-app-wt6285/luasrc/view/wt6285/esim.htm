@@ -115,12 +115,27 @@ if action == "download" then
 	local smdp = http.formvalue("smdp") or ""
 	local ac   = http.formvalue("ac") or ""
 	local cc   = http.formvalue("cc") or ""
+
+	-- 兼容整串激活码：LPA:1$<smdp>$<matching-id>[$<confirmation>]
+	-- 很多人手上只有这一串，不该强迫他们手工拆成两栏。
+	local lpa = ac:match("^%s*[Ll][Pp][Aa]:%d+%$(.+)$") or smdp:match("^%s*[Ll][Pp][Aa]:%d+%$(.+)$")
+	if lpa then
+		local parts = {}
+		for seg in (lpa .. "$"):gmatch("([^$]*)%$") do parts[#parts + 1] = seg end
+		if #parts >= 2 then
+			smdp = parts[1]
+			ac = parts[2]
+			if #parts >= 3 and parts[3] ~= "" and cc == "" then cc = parts[3] end
+		end
+	end
+
 	if smdp == "" or ac == "" then
-		result_ok, result_msg = false, "请填写 SM-DP+ 地址与激活码"
+		result_ok, result_msg = false, "请填写 SM-DP+ 地址与激活码（也可直接粘贴 LPA:1$… 整串）"
 	else
 		-- 下载可能要 30-90 秒，超过 uhttpd 的 60 秒上限，放后台跑
+		sys.exec("sh -c 'echo 请求: smdp=" .. q(smdp) .. " ac=" .. q(ac) .. " > /tmp/wt6285-esim-dl.log' >/dev/null 2>&1")
 		sys.exec(string.format(
-			"sh -c 'flock -x %s lua %s download %s %s %s >/tmp/wt6285-esim-dl.log 2>&1' >/dev/null 2>&1 &",
+			"setsid sh -c 'flock -x %s lua %s download %s %s %s >>/tmp/wt6285-esim-dl.log 2>&1' >/dev/null 2>&1 &",
 			LOCK, SCRIPT, q(smdp), q(ac), q(cc)))
 		result_ok, result_msg = true, "已提交下载，通常 30–90 秒；完成后点「刷新」查看结果"
 	end
@@ -260,7 +275,7 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 			</div>
 			<div style="margin-bottom:10px">
 				<div class="lbl"><%:激活码%></div>
-				<input class="cbi-input-text" style="width:100%" name="ac" placeholder="LPA:1$smdp.example.com$MATCHING-ID" />
+				<input class="cbi-input-text" style="width:100%" name="ac" placeholder="可直接粘贴 LPA:1$smdp.example.com$MATCHING-ID" />
 			</div>
 			<div style="margin-bottom:12px">
 				<div class="lbl"><%:确认码（可选）%></div>

@@ -338,7 +338,10 @@ elseif action == "notif-list" then
 	local buf = {}
 	for obj in final:gmatch("(%{[^{}]*seqNumber[^{}]*%})") do
 		local seq = obj:match('"seqNumber":(%d+)') or "?"
-		local ev  = obj:match('"event":"([^"]*)"') or "?"
+		-- lpac 实际字段名是 profileManagementOperation（install/enable/disable/delete），
+		-- 不是 event；按错名字解析会全部显示成 "?"。
+		local ev  = obj:match('"profileManagementOperation":"([^"]*)"')
+			or obj:match('"event":"([^"]*)"') or "?"
 		local ic  = obj:match('"iccid":"([0-9A-Fa-f]*)"') or ""
 		n = n + 1
 		buf[#buf + 1] = string.format("n=%s|%s|%s", seq, ev, ic)
