@@ -60,6 +60,28 @@ local function last_lpa(out)
 	return final
 end
 
+-- ---------------------------------------------------------------- 操作日志
+-- 页面要能看到"做了什么、结果如何"，否则出问题只能靠 SSH 翻现场。
+local LOGF = "/tmp/wt6285-esim.log"
+
+local function trim_log()
+	local out = run("wc -l < " .. LOGF .. " 2>/dev/null")
+	local n = tonumber((out or ""):match("%d+") or "")
+	if n and n > 300 then
+		run("tail -n 200 " .. LOGF .. " > " .. LOGF .. ".tmp && mv " .. LOGF .. ".tmp " .. LOGF)
+	end
+end
+
+local function logline(msg)
+	local ts = (run("date '+%m-%d %H:%M:%S'") or ""):gsub("%s+$", "")
+	local f = io.open(LOGF, "a")
+	if f then
+		f:write(string.format("[%s] %s\n", ts, msg))
+		f:close()
+	end
+	trim_log()
+end
+
 local function shq(x)
 	return "'" .. tostring(x):gsub("'", "'\\''") .. "'"
 end
@@ -122,6 +144,7 @@ local function lpac_profiles()
 end
 
 local function lpac_set(action, iccid)
+	logline(action .. " " .. iccid)
 	local verb = (action == "enable") and "enable" or "disable"
 	local out, err = lpac_json("profile " .. verb .. " " .. iccid)
 	if not out then return false, err end
@@ -258,11 +281,13 @@ elseif action == "download" then
 	end
 	if final ~= "" and final:match('"code":0') then
 		run("rm -f /tmp/wt6285-esim-*.out")   -- 清缓存，页面直接看到新 profile
+		logline("download 成功")
 		print("result=ok")
 	else
 		local src = (final ~= "") and final or out
 		local msg = src:match('"message":"([^"]*)"') or "download_failed"
 		local dat = src:match('"data":"([^"]*)"') or ""
+		logline("download 失败 " .. msg .. (dat ~= "" and (":" .. dat) or ""))
 		print("error=" .. msg .. (dat ~= "" and (":" .. dat) or ""))
 		os.exit(1)
 	end
@@ -273,6 +298,7 @@ elseif action == "delete" then
 		print("error=badiccid")
 		os.exit(1)
 	end
+	logline("delete " .. iccid)
 	local out = run(LPAC_AT .. " profile delete " .. shq(iccid))
 	local final = last_lpa(out)
 	if final ~= "" and final:match('"code":0') then
@@ -296,6 +322,7 @@ elseif action == "rename" then
 		print("error=emptyname")
 		os.exit(1)
 	end
+	logline("rename " .. iccid .. " → " .. name)
 	local out = run(LPAC_AT .. " profile nickname " .. shq(iccid) .. " " .. shq(name))
 	local final = last_lpa(out)
 	if final ~= "" and final:match('"code":0') then
@@ -307,6 +334,28 @@ elseif action == "rename" then
 		os.exit(1)
 	end
 
+elseif action == "notif-send" then
+	-- lpac notification process <seq>：单条提交，处理完通知仍保留（不自动删）
+	local seq = (arg[2] or ""):gsub("[^0-9]", "")
+	if seq == "" then
+		print("error=badseq")
+		os.exit(1)
+	end
+	logline("notif-send seq=" .. seq)
+	local out = run(LPAC_AT .. " notification process " .. seq)
+	local final = last_lpa(out)
+	if final ~= "" and final:match('"code":0') then
+		run("rm -f /tmp/wt6285-esim-notif-list.out")
+		logline("notif-send seq=" .. seq .. " 成功")
+		print("result=ok")
+	else
+		local src = (final ~= "") and final or out
+		local msg = src:match('"message":"([^"]*)"') or "notif_send_failed"
+		logline("notif-send seq=" .. seq .. " 失败 " .. msg)
+		print("error=" .. msg)
+		os.exit(1)
+	end
+
 elseif action == "notif-remove" then
 	-- lpac notification remove <seqNumber>
 	local seq = (arg[2] or ""):gsub("[^0-9]", "")
@@ -314,6 +363,7 @@ elseif action == "notif-remove" then
 		print("error=badseq")
 		os.exit(1)
 	end
+	logline("notif-remove seq=" .. seq)
 	local out = run(LPAC_AT .. " notification remove " .. seq)
 	local final = last_lpa(out)
 	if final ~= "" and final:match('"code":0') then
@@ -353,6 +403,7 @@ elseif action == "notif-list" then
 
 elseif action == "notif-process" then
 	-- 注意：只提交，不删除。删不删由使用者逐条决定。
+	logline("notif-process 全部")
 	local out = run(LPAC_AT .. " notification process")
 	local final = last_lpa(out)
 	if final ~= "" and final:match('"code":0') then

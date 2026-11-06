@@ -88,6 +88,14 @@ if action == "rename" then
 	end
 end
 
+if action == "notif-send" then
+	local seq = (http.formvalue("seq") or ""):gsub("[^0-9]", "")
+	local out = run_esim("notif-send " .. seq)
+	result_ok = out:match("result=ok") ~= nil
+	result_msg = result_ok and ("通知 " .. seq .. " 已发送（未删除）")
+		or ("发送通知失败：" .. (out:match("error=([^\n]+)") or out))
+end
+
 if action == "notif-remove" then
 	local seq = (http.formvalue("seq") or ""):gsub("[^0-9]", "")
 	local out = run_esim("notif-remove " .. seq)
@@ -247,7 +255,12 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 				<td><%=luci.util.pcdata(n.ev)%></td>
 				<td class="mono"><%=luci.util.pcdata(n.iccid ~= "" and n.iccid or "-")%></td>
 				<td>
-					<form method="post" style="display:inline" onsubmit="return confirm('删除这条通知？仅从本地 eUICC 移除，不会通知 SM-DP+。');">
+					<form method="post" style="display:inline" onsubmit="return confirm('发送这条通知给 SM-DP+？发送后通知仍保留在卡里。');">
+						<input type="hidden" name="act" value="notif-send" />
+						<input type="hidden" name="seq" value="<%=luci.util.pcdata(n.seq)%>" />
+						<input class="cbi-button cbi-button-apply" type="submit" value="<%:发送%>" />
+					</form>
+					<form method="post" style="display:inline;margin-left:6px" onsubmit="return confirm('删除这条通知？仅从本地 eUICC 移除，不会通知 SM-DP+。');">
 						<input type="hidden" name="act" value="notif-remove" />
 						<input type="hidden" name="seq" value="<%=luci.util.pcdata(n.seq)%>" />
 						<input class="cbi-button cbi-button-remove" type="submit" value="<%:删除%>" />
@@ -294,6 +307,28 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 
 	<div class="wt-hint" style="margin-bottom:12px">
 		<%:启用/禁用由本机直接发 APDU 完成，不联网；下载需要 SM-DP+ 可达。%>
+	</div>
+
+	<div class="wt-sec">
+		<h3><%:操作日志%></h3>
+<%
+	local logtxt = ""
+	do
+		local f = io.open("/tmp/wt6285-esim.log")
+		if f then
+			logtxt = f:read("*a") or ""
+			f:close()
+		end
+	end
+%>
+<% if logtxt == "" then %>
+		<div style="padding:14px 16px" class="wt-hint"><%:暂无日志%></div>
+<% else %>
+		<pre style="max-height:280px;overflow:auto;margin:0;padding:12px 16px;font-size:12px;line-height:1.5;white-space:pre-wrap"><%=luci.util.pcdata(logtxt)%></pre>
+<% end %>
+		<div class="wt-hint" style="padding:0 16px 12px">
+			<%:记录下载、重命名、启用/禁用、通知发送与删除的请求和结果，最多保留 200 行。%>
+		</div>
 	</div>
 
 	<div>
