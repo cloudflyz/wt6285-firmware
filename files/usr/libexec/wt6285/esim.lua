@@ -52,6 +52,10 @@ local function cache_age(p)
 	return now - t
 end
 
+local function shq(x)
+	return "'" .. tostring(x):gsub("'", "'\\''") .. "'"
+end
+
 local function have_lpac()
 	return run("test -x " .. LPAC_AT .. " && echo yes"):match("yes") ~= nil
 end
@@ -225,6 +229,35 @@ elseif action == "list" then
 	local out = table.concat(buf, "\n") .. "\n"
 	print(out)
 	write_file(cache_path("list"), out)
+
+elseif action == "download" then
+	-- lpac profile download -s <smdp+> -m <激活码> [-c <确认码>]
+	local smdp = arg[2] or ""
+	local ac   = arg[3] or ""
+	local cc   = arg[4] or ""
+	if smdp == "" or ac == "" then
+		print("error=missing_params")
+		os.exit(1)
+	end
+	local cmd = "profile download -s " .. shq(smdp) .. " -m " .. shq(ac)
+	if cc ~= "" then cmd = cmd .. " -c " .. shq(cc) end
+	local out = run(LPAC_AT .. " " .. cmd)
+	-- 只看最后一条 type=lpa 的终态：progress 事件里也带 "code":0，
+	-- 用全局匹配会把"连接失败"误判成成功（实测不可达 SM-DP+ 曾返回 result=ok）。
+	local final = ""
+	for line in out:gmatch("[^\n]+") do
+		if line:match('"type":"lpa"') then final = line end
+	end
+	if final ~= "" and final:match('"code":0') then
+		run("rm -f /tmp/wt6285-esim-*.out")   -- 清缓存，页面直接看到新 profile
+		print("result=ok")
+	else
+		local src = (final ~= "") and final or out
+		local msg = src:match('"message":"([^"]*)"') or "download_failed"
+		local dat = src:match('"data":"([^"]*)"') or ""
+		print("error=" .. msg .. (dat ~= "" and (":" .. dat) or ""))
+		os.exit(1)
+	end
 
 elseif action == "enable" or action == "disable" then
 	local iccid = (arg[2] or ""):gsub("[^0-9A-Fa-f]", "")

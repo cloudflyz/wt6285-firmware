@@ -53,6 +53,29 @@ if action == "enable" or action == "disable" then
 		and ((action == "enable") and "已下发启用，模块正在重新搜网（约 20 秒）" or "已下发禁用，模块正在重新搜网（约 20 秒）")
 		or ("操作失败：" .. (out:match("error=([^\n]+)") or out))
 end
+
+-- 下载日志（后台任务，页面只负责读）
+local dl_log = nil
+do
+	local f = io.open("/tmp/wt6285-esim-dl.log")
+	if f then dl_log = f:read("*a") f:close() end
+end
+
+if action == "download" then
+	local function q(x) return "'" .. tostring(x or ""):gsub("'", "'\\''") .. "'" end
+	local smdp = http.formvalue("smdp") or ""
+	local ac   = http.formvalue("ac") or ""
+	local cc   = http.formvalue("cc") or ""
+	if smdp == "" or ac == "" then
+		result_ok, result_msg = false, "请填写 SM-DP+ 地址与激活码"
+	else
+		-- 下载可能要 30-90 秒，超过 uhttpd 的 60 秒上限，放后台跑
+		sys.exec(string.format(
+			"sh -c 'flock -x %s lua %s download %s %s %s >/tmp/wt6285-esim-dl.log 2>&1' >/dev/null 2>&1 &",
+			LOCK, SCRIPT, q(smdp), q(ac), q(cc)))
+		result_ok, result_msg = true, "已提交下载，通常 30–90 秒；完成后点「刷新」查看结果"
+	end
+end
 %>
 
 <%+header%>
@@ -136,8 +159,35 @@ table.wt-p .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; 
 <% end %>
 	</div>
 
+	<div class="wt-sec">
+		<h3><%:下载配置文件%></h3>
+		<form method="post" style="padding:14px 16px">
+			<input type="hidden" name="act" value="download" />
+			<div style="margin-bottom:10px">
+				<div class="lbl"><%:SM-DP+ 地址%></div>
+				<input class="cbi-input-text" style="width:100%" name="smdp" placeholder="https://smdp.example.com" />
+			</div>
+			<div style="margin-bottom:10px">
+				<div class="lbl"><%:激活码%></div>
+				<input class="cbi-input-text" style="width:100%" name="ac" placeholder="LPA:1$smdp.example.com$MATCHING-ID" />
+			</div>
+			<div style="margin-bottom:12px">
+				<div class="lbl"><%:确认码（可选）%></div>
+				<input class="cbi-input-text" style="width:100%" name="cc" placeholder="SM-DP+ 要求确认码时填写" />
+			</div>
+			<input class="cbi-button cbi-button-apply" type="submit" value="<%:开始下载%>"
+				onclick="return confirm('开始下载新的 eSIM 配置文件？过程约 30–90 秒。');" />
+		</form>
+<% if dl_log and #dl_log > 0 then %>
+		<pre style="max-height:220px;overflow:auto;margin:0;padding:0 16px 12px;font-size:12px"><%=luci.util.pcdata(dl_log)%></pre>
+<% end %>
+		<div class="wt-hint" style="padding:0 16px 12px">
+			<%:激活码形如 LPA:1$<smdp>$<matching-id>。下载走本机联网（WiFi 客户端即可），不需要 4G。%>
+		</div>
+	</div>
+
 	<div class="wt-hint" style="margin-bottom:12px">
-		<%:启用/禁用由本机直接发 APDU 完成，不联网。下载或删除配置文件仍需手机 App 或 PC/SC 读卡器。%>
+		<%:启用/禁用由本机直接发 APDU 完成，不联网；下载需要 SM-DP+ 可达。%>
 	</div>
 
 	<div>
