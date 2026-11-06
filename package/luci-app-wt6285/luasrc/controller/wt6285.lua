@@ -18,6 +18,12 @@ function action_esim()
 	luci.template.render("wt6285/esim")
 end
 
+-- 旧入口跳转到「工具」下的标签页
+function action_redirect_at() luci.http.redirect(luci.dispatcher.build_url("admin/modem/wt6285/tools/at")) end
+function action_redirect_sms() luci.http.redirect(luci.dispatcher.build_url("admin/modem/wt6285/tools/sms")) end
+function action_redirect_sim() luci.http.redirect(luci.dispatcher.build_url("admin/modem/wt6285/tools/sim")) end
+function action_redirect_settings() luci.http.redirect(luci.dispatcher.build_url("admin/modem/wt6285/tools/settings")) end
+
 -- AT 指令控制台：逐行执行，超时可按需调整（默认 10 秒）
 function action_at()
 	local cmd = luci.http.formvalue("cmd") or ""
@@ -36,7 +42,8 @@ function action_at()
 	-- 当前 AT 口与实际存在的串口，便于排查"口选错了"
 	local atdev = (luci.sys.exec("uci -q get lpac.main.at_device") or ""):gsub("%s+$", "")
 	local ports = (luci.sys.exec("ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null | tr '\\n' ' '") or ""):gsub("%s+$", "")
-	local atdev_ok = (atdev ~= "" and luci.fs.access(atdev)) and true or false
+	-- luci.fs 在新版 LuCI 里不存在，直接调它会整页 500；用 shell 判断字符设备。
+	local atdev_ok = (atdev ~= "" and luci.sys.call("test -c " .. atdev) == 0)
 
 	local out = {}
 	local t0 = os.time()
@@ -79,12 +86,25 @@ function index()
 
 	entry({"admin", "modem"}, firstchild(), _("移远模块"), 60).dependent = false
 	entry({"admin", "modem", "wt6285"}, firstchild(), _("WT6285"), 10).dependent = false
+
+	-- 两个独立页：状态、eSIM
 	entry({"admin", "modem", "wt6285", "status"}, template("wt6285/status"), _("状态"), 10)
-	entry({"admin", "modem", "wt6285", "sim"}, cbi("wt6285/sim"), _("SIM 选择"), 20)
-	entry({"admin", "modem", "wt6285", "esim"}, call("action_esim"), _("eSIM"), 30)
-	entry({"admin", "modem", "wt6285", "sms"}, template("wt6285/sms"), _("短信"), 40)
-	entry({"admin", "modem", "wt6285", "at"}, call("action_at"), _("AT 指令"), 45)
+	entry({"admin", "modem", "wt6285", "esim"}, call("action_esim"), _("eSIM"), 20)
+
+	-- 其余收进「工具」，作为标签页
+	entry({"admin", "modem", "wt6285", "tools"}, firstchild(), _("工具"), 30)
+	entry({"admin", "modem", "wt6285", "tools", "sim"}, cbi("wt6285/sim"), _("SIM 选择"), 10).leaf = true
+	entry({"admin", "modem", "wt6285", "tools", "sms"}, template("wt6285/sms"), _("短信"), 20).leaf = true
+	entry({"admin", "modem", "wt6285", "tools", "at"}, call("action_at"), _("AT 指令"), 30).leaf = true
+	entry({"admin", "modem", "wt6285", "tools", "settings"}, cbi("wt6285/settings"), _("设置"), 40).leaf = true
+
+	-- 重启动作（不显示在菜单里）
 	entry({"admin", "modem", "wt6285", "restart"}, call("action_restart"))
 	entry({"admin", "modem", "wt6285", "restart-hard"}, call("action_restart_hard"))
-	entry({"admin", "modem", "wt6285", "settings"}, cbi("wt6285/settings"), _("设置"), 50)
+
+	-- 旧路径跳转：老的 /wt6285/at、/sms、/sim、/settings 书签不能失效
+	entry({"admin", "modem", "wt6285", "at"}, call("action_redirect_at")).leaf = true
+	entry({"admin", "modem", "wt6285", "sms"}, call("action_redirect_sms")).leaf = true
+	entry({"admin", "modem", "wt6285", "sim"}, call("action_redirect_sim")).leaf = true
+	entry({"admin", "modem", "wt6285", "settings"}, call("action_redirect_settings")).leaf = true
 end
