@@ -41,6 +41,16 @@ fi
 
 SVC=/etc/init.d/wt6285
 [ -x "$SVC" ] && "$SVC" stop >/dev/null 2>&1
+sleep 2
+
+# 清理请求方遗留的逻辑通道：每次失败的 lpac/手工 AT 都可能漏一个，
+# 通道耗尽后 lpac 只会返回 euicc_init（实测 CCHO 返回号一路上涨到 7）。
+# sms_tool 干净开关串口，不会像 cat 那样常驻占口。
+if [ -x /usr/bin/sms_tool ]; then
+	for n in 1 2 3 4 5 6 7; do
+		/usr/bin/sms_tool -d "$AT_DEV" at "AT+CCHC=$n" >/dev/null 2>&1
+	done
+fi
 sleep 1
 
 LPAC_APDU=at
