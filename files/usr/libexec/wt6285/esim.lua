@@ -141,8 +141,23 @@ end
 
 -- ---------------------------------------------------------------- lpac 路径
 
+local function clear_channels()
+	local dev = (run("uci -q get lpac.main.at_device") or ""):gsub("%s+$", "")
+	if dev == "" then dev = "/dev/ttyACM1" end
+	for n = 1, 7 do
+		run(string.format("sms_tool -d %s at \"AT+CCHC=%d\" >/dev/null 2>&1", dev, n))
+	end
+end
+
 local function lpac_json(args)
 	local out = run(LPAC_AT .. " " .. args)
+	-- 刷机/复位后首次调用必现 euicc_init（卡还在初始化 + 启动阶段残留通道）。
+	-- 这里清一遍通道、等 2 秒重试一次，避免每次开机都要人工介入。
+	if out:match("euicc_init") then
+		clear_channels()
+		run("sleep 2")
+		out = run(LPAC_AT .. " " .. args)
+	end
 	-- 输出形如 {"type":"lpa","payload":{"code":0,"message":"success","data":...}}
 	if not out:match('"code":0') then
 		local msg = out:match('"message":"([^"]*)"') or "lpac_failed"
