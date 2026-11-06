@@ -61,5 +61,13 @@ export LPAC_APDU LPAC_APDU_AT_DEVICE LPAC_APDU_AT_BAUD
 /usr/bin/lpac "$@"
 rc=$?
 
+# 跑完再清一次：下载/启用等中途失败时 lpac 可能来不及关通道，
+# 残留会让下一次调用直接 euicc_init（实测下载成功后立刻读通知就撞上）。
+if [ -x /usr/bin/sms_tool ]; then
+	for n in 1 2 3 4 5 6 7; do
+		/usr/bin/sms_tool -d "$AT_DEV" at "AT+CCHC=$n" >/dev/null 2>&1
+	done
+fi
+
 [ -x "$SVC" ] && "$SVC" start >/dev/null 2>&1
 exit $rc
