@@ -149,14 +149,29 @@ local function clear_channels()
 	end
 end
 
+local function reset_uim()
+	-- 刷机/重启后模组的 UIM 会话可能处于坏状态：手工 CCHO 能通，
+	-- 但 lpac 自己初始化必失败（euicc_init）。清逻辑通道不够，
+	-- 实测 AT+CFUN=0 → 5s → AT+CFUN=1 重新初始化 SIM 接口后立即恢复。
+	local dev = (run("uci -q get lpac.main.at_device") or ""):gsub("%s+$", "")
+	if dev == "" then dev = "/dev/ttyACM1" end
+	run(string.format("sms_tool -d %s at 'AT+CFUN=0' >/dev/null 2>&1", dev))
+	run("sleep 5")
+	run(string.format("sms_tool -d %s at 'AT+CFUN=1' >/dev/null 2>&1", dev))
+	run("sleep 12")
+end
+
 local function lpac_json(args)
 	local out = run(LPAC_AT .. " " .. args)
-	-- 刷机/复位后首次调用必现 euicc_init（卡还在初始化 + 启动阶段残留通道）。
-	-- 这里清一遍通道、等 2 秒重试一次，避免每次开机都要人工介入。
+	-- 失败分两级恢复：先清残留逻辑通道；仍失败则复位 UIM 会话再试。
 	if out:match("euicc_init") then
 		clear_channels()
 		run("sleep 2")
 		out = run(LPAC_AT .. " " .. args)
+		if out:match("euicc_init") then
+			reset_uim()
+			out = run(LPAC_AT .. " " .. args)
+		end
 	end
 	-- 输出形如 {"type":"lpa","payload":{"code":0,"message":"success","data":...}}
 	if not out:match('"code":0') then
