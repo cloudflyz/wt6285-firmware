@@ -2,8 +2,38 @@
 # 模块 CFUN 复位后会重新枚举，等接口出现再拉起 WAN
 [ "$ACTION" = "add" ] || exit 0
 [ -n "$PRODUCT" ] || exit 0
+
+# AT 口随 USB 组成变化：MBIM/ECM 组成是 /dev/ttyACM*，RNDIS 组成是 /dev/ttyUSB*。
+# 复位或换组成后编号还会漂移，所以每次枚举都实测一遍再写 uci，
+# 否则 lpac / AT 页 / 短信守护会一起指向不存在的口。
+detect_at_port() {
+	for p in /dev/ttyACM1 /dev/ttyACM0 /dev/ttyUSB1 /dev/ttyUSB2 /dev/ttyUSB0; do
+		[ -c "$p" ] || continue
+		if timeout 6 /usr/bin/sms_tool -d "$p" at "AT" 2>/dev/null | grep -q "OK"; then
+			echo "$p"
+			return 0
+		fi
+	done
+	return 1
+}
+
 case "$PRODUCT" in
 	2c7c/6005/*|2c7c/*)
-		( sleep 3; /etc/init.d/wt6285 start ) >/dev/null 2>&1 &
+		(
+			sleep 6
+			P=$(detect_at_port)
+			if [ -n "$P" ]; then
+				[ "$(uci -q get lpac.main.at_device)" = "$P" ] || {
+					uci set lpac.main.at_device="$P"
+					uci commit lpac
+				}
+				[ "$(uci -q get sms_tool.general.atport)" = "$P" ] || {
+					uci set sms_tool.general.atport="$P"
+					uci commit sms_tool
+				}
+				logger -t wt6285-at "AT port = $P"
+			fi
+			/etc/init.d/wt6285 start
+		) >/dev/null 2>&1 &
 		;;
 esac
