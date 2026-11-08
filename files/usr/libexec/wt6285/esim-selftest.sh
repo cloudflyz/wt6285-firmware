@@ -29,11 +29,13 @@ check() {
 echo "=== eSIM 自检 $(date '+%F %T') ==="
 
 echo "[1] 缓存读取（info）"
-OUT=$(timeout 60 lua "$SCRIPT" info 2>&1)
+# 首次调用可能触发恢复链（清通道 2s + 重试 13s + CFUN 19s + 再试 13s），
+# 单步上限必须大于这条链，否则会误判为失败。
+OUT=$(timeout 180 lua "$SCRIPT" info 2>&1)
 check "info 返回 eid 或已有缓存" "contains:eid=" "$OUT"
 
 echo "[2] profile 列表"
-OUT=$(timeout 60 lua "$SCRIPT" list 2>&1)
+OUT=$(timeout 180 lua "$SCRIPT" list 2>&1)
 check "list 返回 count=" "contains:count=" "$OUT"
 case "$OUT" in
 	*"|01|"*|*"|00|"*) ok "状态字段为 01/00 口径" ;;
@@ -41,7 +43,7 @@ case "$OUT" in
 esac
 
 echo "[3] 通知列表（缓存或实时）"
-OUT=$(timeout 60 lua "$SCRIPT" notif-list 2>&1)
+OUT=$(timeout 180 lua "$SCRIPT" notif-list 2>&1)
 check "notif-list 不报 euicc_init" "notcontains:euicc_init" "$OUT"
 
 echo "[4] 下载参数校验（预期失败，不改卡）"
