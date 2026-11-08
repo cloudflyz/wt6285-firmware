@@ -7,10 +7,10 @@ NRadio WT6285（鲲鹏cc）自用固件，基于 [coolsnowwolf/lede](https://git
 ## 特性
 
 - **内核**：5.10.273（长期维护版，ramips 默认）
-- **eSIM 本机管理**：`esim.lua` 直接发裸 APDU，读 EID、列 profile、启用/禁用（不依赖 lpac、不联网）
+- **eSIM 完整管理**：内置 `lpac`（AT 后端）+ `esim.lua` 封装，支持读 EID、列 profile、启用/禁用、重命名、删除、下载新 profile（SM-DP+ / 整串 LPA）、通知逐条发送与删除；`/usr/bin/lpac-at` 负责让出串口并自带两级自愈
 - **短信收发**：`sms-tool` + 通知脚本
 - **4G 拨号**：`quectel-cm-5G`，兼容 EC200A 系模块
-- **LuCI 面板**：状态 / SIM / eSIM / 短信 / AT 指令 / 设置（含 IMEI 修改与软硬复位）
+- **LuCI 面板**：状态 / eSIM / 工具（SIM 选择、短信、AT 指令、设置）四块，含 IMEI 修改与软硬复位
 - **Vantage 主题 + 仪表盘**：控制台风格界面，`Ctrl+K` 命令面板，设备/上行/射频/终端概览
 - **构建可溯源**：固定 lean commit，CI 全程自动化，产物附 SHA256 与 buildinfo
 - **TLS 统一**：wpad、libopenssl、curl、wget 共用一套 OpenSSL 栈
@@ -23,8 +23,8 @@ NRadio WT6285（鲲鹏cc）自用固件，基于 [coolsnowwolf/lede](https://git
 | 目标 | `ramips/mt76x8` · `mipsel_24kc` |
 | Flash | 16 M（firmware 分区 `0xf70000` = 15.44 MiB） |
 | RAM | 128 M |
-| 4G 模块 | Quectel `2c7c:6005`（EC200A 系），ECM 网卡 `usb0` |
-| AT 口 | `/dev/ttyUSB1` |
+| 4G 模块 | Quectel `2c7c:6005`（EC200A 系），组成可为 RNDIS(usb0) / ECM / MBIM |
+| AT 口 | 随 USB 组成自动探测（MBIM/ECM → `/dev/ttyACM*`，RNDIS → `/dev/ttyUSB*`） |
 | SIM | 外置卡 + 内置 SIM1/SIM2，GPIO 切换 |
 | 无线 | MT7628 内置 2.4G（`kmod-mt7603`） |
 
