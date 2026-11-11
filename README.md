@@ -45,7 +45,7 @@ TLS 栈：`wpad-basic-openssl` + `libopenssl` + `openssl-util` + `wget-ssl` + `L
 
 | 配置 | 内核 | 用途 |
 | --- | --- | --- |
-| `configs/wt6285-lite.config` | 5.10.273 | 精简版，默认 |
+| `configs/wt6285.config` | 5.10.273 | 标准版，默认（精简组件已合并） |
 | `configs/wt6285.config` | 5.10.273 | 完整版（含 usb-modeswitch 等） |
 
 ## 首次启动默认值
@@ -88,7 +88,7 @@ root 登录   root / password（lean default-settings 的初始密码，刷完�
 
 ```sh
 # 准备：lede 源码已就位
-cp configs/wt6285-lite.config lede/.config
+cp configs/wt6285.config lede/.config
 make -C lede defconfig
 
 # 编译 + 自动归档
